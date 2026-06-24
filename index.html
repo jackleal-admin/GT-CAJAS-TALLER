@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT — Cajas Taller</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--gold:#C2AB74;--gold-dark:#a8924f;--gold-light:#f5edd6;--gold-xlight:#faf6ee;--bg:#f8f7f4;--white:#fff;--text:#1a1a1a;--text2:#666;--border:#e5e0d5;--radius:10px;--radius-sm:6px}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.screen{display:none;min-height:100vh}
+.screen.active{display:block}
+.gold-bar{background:var(--gold);color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+.gold-bar h1{font-size:15px;font-weight:600}
+.logo-badge{width:38px;height:38px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--gold)}
+.content{padding:16px;max-width:900px;margin:0 auto}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:#fff;color:var(--text);font-family:inherit;outline:none}
+input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,171,116,.12)}
+button{cursor:pointer;font-family:inherit;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 16px;background:#fff;color:var(--text);transition:all .15s}
+button:hover{background:var(--gold-light)}
+.btn-gold{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:600}
+.btn-gold:hover{background:var(--gold-dark);border-color:var(--gold-dark)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-danger{background:#fff0f0;color:#c0392b;border-color:#f5c6c6}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.label{font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.metric{background:var(--gold-xlight);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--gold-light)}
+.metric .val{font-size:18px;font-weight:700;color:var(--gold)}
+.metric .lbl{font-size:11px;color:var(--text2);margin-top:2px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-pending{background:#faeeda;color:#7a4a00}
+.badge-paid{background:#e8f5e9;color:#1b5e20}
+.badge-open{background:#e3f2fd;color:#0d47a1}
+.badge-closed{background:#f3f3f3;color:#555}
+.alert{border-radius:var(--radius-sm);padding:10px 13px;font-size:12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px}
+.alert i{margin-top:1px;flex-shrink:0}
+.alert-warn{background:#fff8e1;border:1px solid #ffe082;color:#5a3e00}
+.alert-err{background:#ffebee;border:1px solid #ffcdd2;color:#7b1c1c}
+.alert-ok{background:#e8f5e9;border:1px solid #c8e6c9;color:#1b5e20}
+.alert-info{background:#e3f2fd;border:1px solid #bbdefb;color:#0d3c6e}
+.tbl-wrap{overflow-x:auto;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--gold);color:#fff;padding:8px 7px;text-align:left;font-weight:600;font-size:11px;white-space:nowrap}
+td{padding:7px 7px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text)}
+tr:nth-child(even) td{background:var(--gold-xlight)}
+tr:hover td{background:#f5f0e8}
+.total-row td{background:var(--gold)!important;color:#fff;font-weight:700}
+.nav-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0;flex-wrap:wrap}
+.tab{padding:9px 16px;font-size:13px;cursor:pointer;border-bottom:3px solid transparent;color:var(--text2);background:none;border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:-2px;font-weight:500}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold);font-weight:700}
+.tab:hover{background:var(--gold-xlight);color:var(--gold)}
+.section-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
+.history-item{font-size:11px;padding:7px 0;border-bottom:1px solid var(--border);color:var(--text2);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.bar-wrap{margin-bottom:10px}
+.bar-label{font-size:11px;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between}
+.bar-bg{background:var(--border);border-radius:4px;height:14px;overflow:hidden}
+.bar-fill{height:100%;background:var(--gold);border-radius:4px;transition:width .5s}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin:14px 0}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--gold);background:transparent;transition:background .15s}
+.pin-dot.filled{background:var(--gold)}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:220px;margin:0 auto}
+.numpad button{height:48px;font-size:18px;font-weight:600;border-radius:var(--radius-sm);background:#fff;border:1px solid var(--border)}
+.numpad button:hover{background:var(--gold-light)}
+.xml-drop{border:2px dashed var(--gold);border-radius:var(--radius);padding:18px;text-align:center;cursor:pointer;color:var(--text2);font-size:13px;background:var(--gold-xlight);transition:background .15s}
+.xml-drop:hover{background:var(--gold-light)}
+.xml-drop i{font-size:30px;color:var(--gold);display:block;margin-bottom:6px}
+.notif-badge{background:#e53935;color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;margin-left:6px}
+.loading{text-align:center;padding:30px;color:var(--text2);font-size:13px}
+.loading i{font-size:28px;display:block;margin-bottom:8px;color:var(--gold)}
+.row-alert td{background:#fff8e1!important}
+@media(max-width:600px){.grid2,.grid3{grid-template-columns:1fr}.nav-tabs{gap:2px}.tab{padding:8px 10px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+<!-- LOGIN -->
+<div id="screen-login" class="screen active">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)">
+    <div style="width:100%;max-width:340px;padding:20px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="width:70px;height:70px;background:var(--gold);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:26px;font-weight:800;color:#fff;letter-spacing:1px">GT</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text)">Grupo Trego</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">Registro de gastos — Taller</div>
+      </div>
+      <div class="card" style="padding:20px">
+        <div class="label" style="text-align:center;margin-bottom:12px">ingresa tu pin</div>
+        <div class="pin-dots" id="pin-dots">
+          <div class="pin-dot" id="d0"></div><div class="pin-dot" id="d1"></div>
+          <div class="pin-dot" id="d2"></div><div class="pin-dot" id="d3"></div>
+        </div>
+        <div id="login-err" style="display:none" class="alert alert-err">
+          <i class="ti ti-alert-circle"></i><span>PIN incorrecto. Intenta de nuevo.</span>
+        </div>
+        <div class="numpad" style="margin-top:14px">
+          <button onclick="pinKey('1')">1</button><button onclick="pinKey('2')">2</button><button onclick="pinKey('3')">3</button>
+          <button onclick="pinKey('4')">4</button><button onclick="pinKey('5')">5</button><button onclick="pinKey('6')">6</button>
+          <button onclick="pinKey('7')">7</button><button onclick="pinKey('8')">8</button><button onclick="pinKey('9')">9</button>
+          <button onclick="pinKey('back')" style="font-size:20px"><i class="ti ti-backspace"></i></button>
+          <button onclick="pinKey('0')">0</button>
+          <button onclick="pinKey('ok')" class="btn-gold"><i class="ti ti-check"></i></button>
+        </div>
+      </div>
+      <div id="fb-status" class="alert alert-info" style="margin-top:10px;display:none">
+        <i class="ti ti-loader"></i><span>Conectando con la base de datos...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="screen-main" class="screen">
+  <div class="gold-bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="logo-badge">GT</div>
+      <div><div style="font-size:14px;font-weight:700">Grupo Trego</div><div style="font-size:11px;opacity:.85">Caja chica — Taller</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="user-chip" style="font-size:12px;background:rgba(255,255,255,.2);padding:4px 10px;border-radius:20px"></span>
+      <button onclick="logout()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 9px;font-size:12px;border-radius:6px" title="Cerrar sesión"><i class="ti ti-logout"></i></button>
+    </div>
+  </div>
+  <div class="content">
+    <div class="nav-tabs">
+      <button class="tab active" onclick="showTab('cajas')"><i class="ti ti-folder"></i> Cajas</button>
+      <button class="tab" onclick="showTab('nueva-caja')"><i class="ti ti-plus"></i> Nueva caja</button>
+      <button class="tab" id="tab-btn-dashboard" onclick="showTab('dashboard')" style="display:none"><i class="ti ti-chart-bar"></i> Dashboard</button>
+      <button class="tab" id="tab-btn-catalogo" onclick="showTab('catalogo')" style="display:none"><i class="ti ti-list"></i> Catálogo</button>
+    </div>
+
+    <div id="tab-cajas">
+      <div id="notif-box" style="display:none" class="alert alert-warn"><i class="ti ti-bell"></i><span id="notif-text"></span></div>
+      <div id="cajas-list"><div class="loading"><i class="ti ti-loader"></i>Cargando cajas...</div></div>
+      <div style="margin-top:10px">
+        <button onclick="exportConsolidado()" class="btn-sm"><i class="ti ti-download"></i> Exportar reporte consolidado</button>
+      </div>
+    </div>
+
+    <div id="tab-nueva-caja" style="display:none">
+      <div class="card">
+        <div class="section-title"><i class="ti ti-folder-plus"></i> Crear nueva caja chica</div>
+        <div class="label">nombre de la caja</div>
+        <input type="text" id="new-caja-name" placeholder='ej. CAJA CHICA CON FACTURA 165' style="margin-bottom:12px">
+        <button class="btn-gold" onclick="crearCaja()"><i class="ti ti-plus"></i> Crear caja</button>
+      </div>
+    </div>
+
+    <div id="tab-dashboard" style="display:none">
+      <div class="card">
+        <div class="section-title"><i class="ti ti-chart-bar"></i> Gasto acumulado por equipo / proyecto</div>
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+          <button onclick="setFiltro('dia')" id="fb-dia" class="btn-gold btn-sm">Hoy</button>
+          <button onclick="setFiltro('semana')" id="fb-semana" class="btn-sm">Semana</button>
+          <button onclick="setFiltro('mes')" id="fb-mes" class="btn-sm">Mes</button>
+          <button onclick="setFiltro('todo')" id="fb-todo" class="btn-sm">Todo</button>
+        </div>
+        <div id="dash-equipos"></div>
+      </div>
+      <div class="card">
+        <div class="section-title"><i class="ti ti-building-store"></i> Gasto por proveedor</div>
+        <div id="dash-proveedores"></div>
+      </div>
+    </div>
+
+    <div id="tab-catalogo" style="display:none">
+      <div class="card">
+        <div class="section-title"><i class="ti ti-list"></i> Catálogo de equipos y proyectos</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <input type="text" id="cat-input" placeholder="Nueva opción..." style="flex:1;min-width:160px">
+          <select id="cat-tipo" style="width:130px">
+            <option value="maquinaria">Maquinaria</option>
+            <option value="vehiculo">Vehículo</option>
+            <option value="area">Área</option>
+            <option value="proyecto">Proyecto</option>
+          </select>
+          <button class="btn-gold btn-sm" onclick="agregarCatalogo()"><i class="ti ti-plus"></i> Agregar</button>
+        </div>
+        <div id="catalogo-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAJA DETALLE -->
+<div id="screen-caja" class="screen">
+  <div class="gold-bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="showMain()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 9px;border-radius:6px"><i class="ti ti-arrow-left"></i></button>
+      <div>
+        <div style="font-size:13px;font-weight:700" id="caja-title-bar">Caja</div>
+        <div style="font-size:11px;opacity:.85" id="caja-sub-bar"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span id="caja-estatus-badge"></span>
+      <button id="btn-pago" onclick="togglePago()" style="display:none;font-size:11px;padding:5px 11px" class="btn-gold btn-sm"></button>
+      <button onclick="exportarCaja()" class="btn-sm" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff"><i class="ti ti-download"></i> ZIP</button>
+    </div>
+  </div>
+  <div class="content" id="caja-content"></div>
+</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBakAEl8NR38ukSr1pFQLNvmOFg-GMbnlI",
+  authDomain: "gt-cajas-taller.firebaseapp.com",
+  projectId: "gt-cajas-taller",
+  storageBucket: "gt-cajas-taller.firebasestorage.app",
+  messagingSenderId: "863912803408",
+  appId: "1:863912803408:web:3b23982f4abe35c78ee555",
+  measurementId: "G-FW5M92E7ZD"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+
+const USERS = {'1234':{name:'América',role:'capturista'},'7895':{name:'Jack',role:'admin'}};
+const CAT_DEFAULT = {
+  maquinaria:['EE0021 — Excavadora 210G JD','EE0040 — Excavadora 200G JD','EM0001 — Motoconformadora 670D JD','EM0011 — Motoconformadora 672D JD','EM0018 — Motoconformadora 670D JD','EM0046 — Motoconformadora 670G JD','ER0049 — Retroexcavadora 310P JD','ER0060 — Retroexcavadora 310P JD','EV0012 — Vibrocompactador XCMG XS113','EV0022 — Vibrocompactador Bomag Komatsu','EV0048 — Vibrocompactador XCMG XS113'],
+  vehiculo:['VP-'],
+  area:['TALLER','OPERACIONES'],
+  proyecto:['23021 ESMERALDAS','25001 PROYECTOS ANTERIORES','25035 AMATERRA','25037 BONATERRA','25039 AV. HUMBERTO RAMOS','25041 CALLE CADEREYTA','25043 NAVE SALTILLO','25044 TERRANOVA HUASTECA','26045 ESCUELA DE MEDICINA','26046 DRENAJE GEPSA','26047 VALLE CONDESA EXTRAS','26048 COLUMNAS INCASA']
+};
+
+let S = {user:null, cajas:[], catalogo:JSON.parse(JSON.stringify(CAT_DEFAULT)), activeCajaId:null, filtro:'todo', pinBuffer:'', unsubCajas:null, adjuntosTemp:{}};
+
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function fmt(n){return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0)}
+function fmtDate(d){if(!d)return '';try{return new Date(d).toLocaleDateString('es-MX')}catch(e){return d}}
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+
+async function fbLoad(){
+  try{
+    const snap = await getDoc(doc(db,'app','state'));
+    if(snap.exists()){const d=snap.data();S.cajas=d.cajas||[];S.catalogo=d.catalogo||JSON.parse(JSON.stringify(CAT_DEFAULT));}
+  }catch(e){console.error(e)}
+}
+
+async function fbSave(){
+  try{await setDoc(doc(db,'app','state'),{cajas:S.cajas,catalogo:S.catalogo,updatedAt:new Date().toISOString()});}catch(e){console.error(e)}
+}
+
+function fbListen(){
+  if(S.unsubCajas) S.unsubCajas();
+  S.unsubCajas = onSnapshot(doc(db,'app','state'),(snap)=>{
+    if(snap.exists()){
+      const d=snap.data();
+      S.cajas=d.cajas||[];
+      S.catalogo=d.catalogo||S.catalogo;
+      const cur = document.querySelector('.screen.active')?.id;
+      if(cur==='screen-main'){
+        const tab = document.querySelector('.tab.active')?.getAttribute('onclick');
+        if(tab?.includes('cajas')) renderCajas();
+        if(tab?.includes('dashboard')) renderDashboard();
+        if(tab?.includes('catalogo')) renderCatalogo();
+      }
+      if(cur==='screen-caja') renderCajaContent();
+    }
+  });
+}
+
+window.pinKey = function(k){
+  const err=document.getElementById('login-err');
+  if(k==='back'){S.pinBuffer=S.pinBuffer.slice(0,-1);}
+  else if(k==='ok'){
+    const u=USERS[S.pinBuffer];
+    if(u){S.user={...u};err.style.display='none';S.pinBuffer='';updateDots();loginOk();}
+    else{err.style.display='flex';S.pinBuffer='';}
+  }else{if(S.pinBuffer.length<4)S.pinBuffer+=k;}
+  updateDots();
+};
+
+function updateDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).classList.toggle('filled',i<S.pinBuffer.length);}
+
+async function loginOk(){
+  document.getElementById('fb-status').style.display='flex';
+  await fbLoad();
+  document.getElementById('fb-status').style.display='none';
+  document.getElementById('user-chip').textContent=S.user.name;
+  const isAdmin=S.user.role==='admin';
+  document.getElementById('tab-btn-dashboard').style.display=isAdmin?'':'none';
+  document.getElementById('tab-btn-catalogo').style.display=isAdmin?'':'none';
+  fbListen();
+  showScreen('screen-main');
+  renderCajas();
+}
+
+window.logout = function(){
+  if(S.unsubCajas){S.unsubCajas();S.unsubCajas=null;}
+  S.user=null;S.activeCajaId=null;S.pinBuffer='';
+  updateDots();
+  document.getElementById('login-err').style.display='none';
+  showScreen('screen-login');
+};
+
+window.showTab = function(t){
+  document.querySelectorAll('[id^="tab-"]').forEach(el=>{if(el.tagName==='DIV')el.style.display='none';});
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+t).style.display='block';
+  document.querySelectorAll('.tab').forEach(b=>{if(b.getAttribute('onclick')?.includes("'"+t+"'"))b.classList.add('active');});
+  if(t==='dashboard')renderDashboard();
+  if(t==='catalogo')renderCatalogo();
+  if(t==='cajas')renderCajas();
+};
+
+window.showMain = function(){S.activeCajaId=null;showScreen('screen-main');showTab('cajas');};
+
+window.crearCaja = async function(){
+  const name=document.getElementById('new-caja-name').value.trim().toUpperCase();
+  if(!name){alert('Escribe el nombre de la caja');return;}
+  const c={id:genId(),name,estatus:'no_pagado',estado:'abierta',gastos:[],adjuntos:{},historial:[{ts:new Date().toISOString(),user:S.user.name,accion:'Caja creada: '+name}],createdAt:new Date().toISOString()};
+  S.cajas.push(c);
+  await fbSave();
+  document.getElementById('new-caja-name').value='';
+  showTab('cajas');
+};
+
+function renderCajas(){
+  const el=document.getElementById('cajas-list');
+  if(!S.cajas.length){el.innerHTML='<div class="loading"><i class="ti ti-folder-off"></i>Sin cajas. Crea una nueva.</div>';
+    document.getElementById('notif-box').style.display='none';return;}
+  if(S.user?.role==='admin'){
+    const pend=S.cajas.filter(c=>c.estatus==='no_pagado').length;
+    const nb=document.getElementById('notif-box');
+    if(pend>0){nb.style.display='flex';document.getElementById('notif-text').textContent=pend+' caja'+(pend>1?'s':'')+' pendiente'+(pend>1?'s':'')+' de pago';}
+    else nb.style.display='none';
+  }
+  el.innerHTML=S.cajas.slice().reverse().map(c=>{
+    const tot=c.gastos.reduce((s,g)=>s+(g.total||0),0);
+    const eb=c.estatus==='pagado'?'<span class="badge badge-paid"><i class="ti ti-circle-check"></i> Pagado</span>':'<span class="badge badge-pending"><i class="ti ti-clock"></i> No pagado</span>';
+    const esb=c.estado==='abierta'?'<span class="badge badge-open">Abierta</span>':'<span class="badge badge-closed">Cerrada</span>';
+    return `<div class="card" style="cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 12px rgba(194,171,116,.2)'" onmouseout="this.style.boxShadow=''" onclick="abrirCaja('${c.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div><div style="font-size:14px;font-weight:700;margin-bottom:4px">${c.name}</div>
+        <div style="font-size:11px;color:var(--text2)">${fmtDate(c.createdAt)} · ${c.gastos.length} registro(s)</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${eb} ${esb}</div>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="metric"><div class="val">${fmt(tot)}</div><div class="lbl">Total de la caja</div></div>
+        <div class="metric"><div class="val" style="font-size:16px">${c.gastos.length}</div><div class="lbl">Facturas</div></div>
+      </div></div>`;
+  }).join('');
+}
+
+window.abrirCaja = function(id){
+  S.activeCajaId=id;
+  const c=S.cajas.find(x=>x.id===id);
+  document.getElementById('caja-title-bar').textContent=c.name;
+  document.getElementById('caja-sub-bar').textContent=c.estado==='abierta'?'Caja abierta':'Caja cerrada';
+  const eb=document.getElementById('caja-estatus-badge');
+  eb.innerHTML=c.estatus==='pagado'?'<span class="badge badge-paid">Pagado</span>':'<span class="badge badge-pending">No pagado</span>';
+  const bp=document.getElementById('btn-pago');
+  if(S.user.role==='admin'){bp.style.display='';bp.textContent=c.estatus==='pagado'?'Marcar no pagado':'Marcar pagado';}
+  else bp.style.display='none';
+  renderCajaContent();
+  showScreen('screen-caja');
+};
+
+window.togglePago = async function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  c.estatus=c.estatus==='pagado'?'no_pagado':'pagado';
+  c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Estatus: '+(c.estatus==='pagado'?'Pagado':'No pagado')});
+  await fbSave();
+  abrirCaja(S.activeCajaId);
+};
+
+function renderCajaContent(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  if(!c) return;
+  const isAdmin=S.user.role==='admin';
+  const isCerrada=c.estado==='cerrada';
+  const tSub=c.gastos.reduce((s,g)=>s+(g.subtotal||0),0);
+  const tIva=c.gastos.reduce((s,g)=>s+(g.iva||0),0);
+  const tTot=c.gastos.reduce((s,g)=>s+(g.total||0),0);
+
+  const alertas=isAdmin?c.gastos.filter(g=>{if(!g.fechaFactura)return false;return(new Date()-new Date(g.fechaFactura))/(864e5)>14;}):[];
+  let alertHtml=alertas.length?`<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span><b>${alertas.length} factura(s)</b> con fecha mayor a 2 semanas: ${alertas.map(g=>g.noFactura||'s/n').join(', ')}</span></div>`:'';
+
+  const catAll=[...S.catalogo.maquinaria,...S.catalogo.vehiculo,...S.catalogo.area,...S.catalogo.proyecto];
+  let formHtml='';
+  if(!isCerrada){
+    formHtml=`<div class="card">
+      <div class="section-title"><i class="ti ti-file-plus"></i> Registrar gasto</div>
+      <div id="xml-alert"></div>
+      <div class="xml-drop" onclick="document.getElementById('xml-input').click()">
+        <i class="ti ti-file-code"></i>
+        <div style="font-weight:600">Cargar XML del SAT</div>
+        <div style="font-size:11px;margin-top:4px;color:var(--gold)">Auto-llena: fecha, folio, UUID, subtotal, IVA y total</div>
+      </div>
+      <input type="file" id="xml-input" accept=".xml" style="display:none" onchange="parseXML(event)">
+      <div style="margin-top:12px" class="grid2">
+        <div><div class="label">equipo / proyecto *</div>
+          <select id="f-equipo" onchange="toggleOtro()">
+            <option value="">Seleccionar...</option>
+            ${catAll.map(x=>`<option>${x}</option>`).join('')}
+            <option value="__otro__">+ Otro (escribir)</option>
+          </select>
+          <input type="text" id="f-equipo-otro" placeholder="Escribe el equipo" style="display:none;margin-top:6px">
+        </div>
+        <div><div class="label">proveedor *</div><input type="text" id="f-proveedor" placeholder="Nombre del proveedor"></div>
+      </div>
+      <div style="margin-top:8px"><div class="label">descripción *</div><input type="text" id="f-desc" placeholder="Ej. ALTERNADOR, COMBUSTIBLE..."></div>
+      <div style="margin-top:8px" class="grid3">
+        <div><div class="label">no. factura</div><input type="text" id="f-nofact" readonly style="background:var(--gold-xlight)"></div>
+        <div><div class="label">fecha factura</div><input type="text" id="f-fecha" readonly style="background:var(--gold-xlight)"></div>
+        <div><div class="label">UUID / folio fiscal</div><input type="text" id="f-uuid" readonly style="background:var(--gold-xlight);font-size:10px"></div>
+      </div>
+      <div style="margin-top:8px" class="grid3">
+        <div><div class="label">subtotal</div><input type="number" id="f-subtotal" readonly style="background:var(--gold-xlight)"></div>
+        <div><div class="label">IVA</div><input type="number" id="f-iva" readonly style="background:var(--gold-xlight)"></div>
+        <div><div class="label">total</div><input type="number" id="f-total" readonly style="background:var(--gold-xlight);font-weight:700"></div>
+      </div>
+      <div style="margin-top:8px"><div class="label">adjuntar PDF o foto de factura</div>
+        <input type="file" id="f-adjunto" accept=".pdf,image/*">
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-gold" onclick="registrarGasto()"><i class="ti ti-plus"></i> Registrar gasto</button>
+        <button onclick="limpiarForm()"><i class="ti ti-refresh"></i> Limpiar</button>
+      </div>
+    </div>`;
+  }
+
+  const tbody=c.gastos.length?c.gastos.map(g=>{
+    const vieja=isAdmin&&g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14;
+    return `<tr class="${vieja?'row-alert':''}">
+      <td>${fmtDate(g.fechaFactura)}</td>
+      <td>${g.equipo||''}</td>
+      <td>${g.proveedor||''}</td>
+      <td>${g.descripcion||''}</td>
+      <td>${g.noFactura||''}</td>
+      <td style="font-size:10px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.uuid||''}">${g.uuid||''}</td>
+      <td style="text-align:right">${fmt(g.subtotal)}</td>
+      <td style="text-align:right">${fmt(g.iva)}</td>
+      <td style="text-align:right;font-weight:700">${fmt(g.total)}</td>
+      <td style="text-align:center">${g.adjunto?'<i class="ti ti-paperclip" style="color:var(--gold)"></i>':''}</td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="10" style="text-align:center;color:var(--text2);padding:20px">Sin gastos registrados</td></tr>';
+
+  let notaHtml='';
+  if(isAdmin){
+    notaHtml=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div class="label">nota interna (solo Jack)</div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <input type="text" id="nota-input" placeholder="Agregar nota de revisión..." style="flex:1" value="${(c.notaAdmin||'').replace(/"/g,'&quot;')}">
+        <button onclick="guardarNota()" class="btn-gold btn-sm">Guardar</button>
+      </div>
+      ${c.notaAdmin?`<div style="margin-top:8px;font-size:12px;color:var(--text2);background:var(--gold-xlight);padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--gold-light)">${c.notaAdmin}</div>`:''}
+    </div>`;
+  }
+
+  let cierreHtml='';
+  if(isAdmin){
+    cierreHtml=c.estado==='abierta'
+      ?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button onclick="cerrarCaja()" class="btn-sm btn-danger"><i class="ti ti-lock"></i> Cerrar caja (bloquear edición)</button></div>`
+      :`<div class="alert alert-info" style="margin-top:10px"><i class="ti ti-lock"></i> Caja cerrada — solo lectura</div>`;
+  }
+
+  const hist=`<div class="card" style="margin-top:12px">
+    <div class="section-title"><i class="ti ti-history"></i> Historial de cambios</div>
+    ${(c.historial||[]).slice().reverse().slice(0,20).map(h=>`<div class="history-item"><span>${h.accion}</span><span style="white-space:nowrap">${h.user} · ${fmtDate(h.ts)}</span></div>`).join('')}
+  </div>`;
+
+  document.getElementById('caja-content').innerHTML=`
+    ${alertHtml}
+    ${formHtml}
+    <div class="card" style="margin-top:12px">
+      <div class="section-title"><i class="ti ti-table"></i> Gastos registrados</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Fecha</th><th>Equipo</th><th>Proveedor</th><th>Descripción</th>
+            <th>No. Fact.</th><th>UUID</th>
+            <th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th>
+            <th style="text-align:right">Total</th><th>Adj.</th>
+          </tr></thead>
+          <tbody>${tbody}</tbody>
+          <tfoot><tr class="total-row">
+            <td colspan="6" style="text-align:right">Total de la caja</td>
+            <td style="text-align:right">${fmt(tSub)}</td>
+            <td style="text-align:right">${fmt(tIva)}</td>
+            <td style="text-align:right;font-size:14px">${fmt(tTot)}</td>
+            <td></td>
+          </tr></tfoot>
+        </table>
+      </div>
+      ${notaHtml}
+      ${cierreHtml}
+    </div>
+    ${hist}`;
+}
+
+window.toggleOtro=function(){
+  document.getElementById('f-equipo-otro').style.display=document.getElementById('f-equipo').value==='__otro__'?'':'none';
+};
+
+window.parseXML=function(e){
+  const file=e.target.files[0];if(!file)return;
+  const alertEl=document.getElementById('xml-alert');
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const doc=new DOMParser().parseFromString(ev.target.result,'application/xml');
+      let comp=doc.querySelector('Comprobante');
+      if(!comp){alertEl.innerHTML='<div class="alert alert-err"><i class="ti ti-alert-circle"></i> XML no válido o no es CFDI del SAT</div>';return;}
+      const estado=comp.getAttribute('Estado')||'';
+      if(estado.toLowerCase().includes('cancel')){
+        alertEl.innerHTML='<div class="alert alert-err"><i class="ti ti-ban"></i> Factura CANCELADA — no se puede registrar</div>';
+        document.getElementById('xml-input').value='';return;
+      }
+      let timbre=doc.querySelector('TimbreFiscalDigital');
+      const uuid=timbre?.getAttribute('UUID')||'';
+      if(uuid){
+        const allUUIDs=S.cajas.flatMap(c=>c.gastos.map(g=>g.uuid));
+        if(allUUIDs.includes(uuid)){
+          alertEl.innerHTML='<div class="alert alert-err"><i class="ti ti-alert-circle"></i> UUID duplicado — esta factura ya fue registrada anteriormente</div>';
+          document.getElementById('xml-input').value='';return;
+        }
+      }
+      const fecha=comp.getAttribute('Fecha')||'';
+      const subtotal=parseFloat(comp.getAttribute('SubTotal')||'0');
+      const total=parseFloat(comp.getAttribute('Total')||'0');
+      const iva=parseFloat((total-subtotal).toFixed(2));
+      let serie=comp.getAttribute('Serie')||'';
+      let folio=comp.getAttribute('Folio')||'';
+      let noFact=(serie+folio).trim()||folio||serie;
+      document.getElementById('f-nofact').value=noFact;
+      document.getElementById('f-fecha').value=fecha?new Date(fecha).toLocaleDateString('es-MX'):'';
+      document.getElementById('f-uuid').value=uuid;
+      document.getElementById('f-subtotal').value=subtotal.toFixed(2);
+      document.getElementById('f-iva').value=iva.toFixed(2);
+      document.getElementById('f-total').value=total.toFixed(2);
+      document.getElementById('f-nofact').dataset.rawFecha=fecha;
+      document.getElementById('f-uuid').dataset.uuid=uuid;
+      alertEl.innerHTML='<div class="alert alert-ok"><i class="ti ti-circle-check"></i> XML cargado correctamente — revisa y completa los campos marcados *</div>';
+    }catch(err){alertEl.innerHTML='<div class="alert alert-err"><i class="ti ti-alert-circle"></i> Error al leer el XML: '+err.message+'</div>';}
+  };
+  reader.readAsText(file,'UTF-8');
+};
+
+window.limpiarForm=function(){
+  ['f-equipo','f-proveedor','f-desc','f-nofact','f-fecha','f-uuid','f-subtotal','f-iva','f-total'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';delete el.dataset.rawFecha;delete el.dataset.uuid;}});
+  const adj=document.getElementById('f-adjunto');if(adj)adj.value='';
+  const xa=document.getElementById('xml-alert');if(xa)xa.innerHTML='';
+  const xi=document.getElementById('xml-input');if(xi)xi.value='';
+  const eo=document.getElementById('f-equipo-otro');if(eo)eo.style.display='none';
+};
+
+window.registrarGasto=async function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  let equipo=document.getElementById('f-equipo').value;
+  if(equipo==='__otro__')equipo=document.getElementById('f-equipo-otro').value.trim();
+  const proveedor=document.getElementById('f-proveedor').value.trim();
+  const desc=document.getElementById('f-desc').value.trim();
+  if(!equipo||!proveedor||!desc){alert('Completa equipo, proveedor y descripción');return;}
+  const uuid=document.getElementById('f-uuid').dataset?.uuid||document.getElementById('f-uuid').value;
+  if(!uuid){alert('Carga un XML válido del SAT antes de registrar');return;}
+  const adjFile=document.getElementById('f-adjunto').files[0];
+  const gasto={
+    id:genId(),equipo,proveedor,descripcion:desc,
+    noFactura:document.getElementById('f-nofact').value,
+    fechaFactura:document.getElementById('f-nofact').dataset?.rawFecha||'',
+    uuid,
+    subtotal:parseFloat(document.getElementById('f-subtotal').value)||0,
+    iva:parseFloat(document.getElementById('f-iva').value)||0,
+    total:parseFloat(document.getElementById('f-total').value)||0,
+    adjunto:adjFile?adjFile.name:null,
+    registradoPor:S.user.name,
+    registradoEn:new Date().toISOString()
+  };
+  if(adjFile){
+    await new Promise(res=>{
+      const r=new FileReader();
+      r.onload=ev=>{if(!c.adjuntos)c.adjuntos={};c.adjuntos[gasto.id]={name:adjFile.name,data:ev.target.result};res();};
+      r.readAsDataURL(adjFile);
+    });
+  }
+  c.gastos.push(gasto);
+  c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:`Gasto: ${desc} — ${proveedor} — ${fmt(gasto.total)}`});
+  await fbSave();
+  limpiarForm();
+  renderCajaContent();
+};
+
+window.guardarNota=async function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  c.notaAdmin=document.getElementById('nota-input').value.trim();
+  c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Nota actualizada'});
+  await fbSave();
+  renderCajaContent();
+};
+
+window.cerrarCaja=async function(){
+  if(!confirm('¿Cerrar esta caja? Ya no se podrán agregar gastos.'))return;
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  c.estado='cerrada';
+  c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Caja cerrada'});
+  await fbSave();
+  abrirCaja(S.activeCajaId);
+};
+
+function renderDashboard(){
+  const now=new Date();const f=S.filtro;
+  const gastos=S.cajas.flatMap(c=>c.gastos.map(g=>({...g,_caja:c.name})));
+  const filtered=gastos.filter(g=>{
+    if(!g.registradoEn)return f==='todo';
+    const d=new Date(g.registradoEn);
+    if(f==='dia')return d.toDateString()===now.toDateString();
+    if(f==='semana')return(now-d)/(864e5)<=7;
+    if(f==='mes')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    return true;
+  });
+  const byEq={};filtered.forEach(g=>{const k=g.equipo||'Sin equipo';byEq[k]=(byEq[k]||0)+(g.total||0);});
+  const sortedEq=Object.entries(byEq).sort((a,b)=>b[1]-a[1]);
+  const maxEq=sortedEq[0]?.[1]||1;
+  document.getElementById('dash-equipos').innerHTML=sortedEq.length
+    ?sortedEq.slice(0,15).map(([k,v])=>`<div class="bar-wrap"><div class="bar-label"><span>${k}</span><span style="font-weight:700">${fmt(v)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxEq*100)}%"></div></div></div>`).join('')
+    :'<div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">Sin datos para el período</div>';
+  const byPv={};filtered.forEach(g=>{const k=g.proveedor||'Sin proveedor';byPv[k]=(byPv[k]||0)+(g.total||0);});
+  const sortedPv=Object.entries(byPv).sort((a,b)=>b[1]-a[1]);
+  const maxPv=sortedPv[0]?.[1]||1;
+  document.getElementById('dash-proveedores').innerHTML=sortedPv.length
+    ?sortedPv.slice(0,10).map(([k,v])=>`<div class="bar-wrap"><div class="bar-label"><span>${k}</span><span style="font-weight:700">${fmt(v)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxPv*100)}%;background:#888"></div></div></div>`).join('')
+    :'<div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">Sin datos</div>';
+}
+
+window.setFiltro=function(f){
+  S.filtro=f;
+  ['dia','semana','mes','todo'].forEach(k=>{const b=document.getElementById('fb-'+k);if(b){b.className=k===f?'btn-gold btn-sm':'btn-sm';}});
+  renderDashboard();
+};
+
+function renderCatalogo(){
+  const all=[...S.catalogo.maquinaria.map(x=>({tipo:'Maquinaria',k:'maquinaria',v:x})),...S.catalogo.vehiculo.map(x=>({tipo:'Vehículo',k:'vehiculo',v:x})),...S.catalogo.area.map(x=>({tipo:'Área',k:'area',v:x})),...S.catalogo.proyecto.map(x=>({tipo:'Proyecto',k:'proyecto',v:x}))];
+  document.getElementById('catalogo-list').innerHTML=`<div style="max-height:320px;overflow-y:auto">
+    <table><thead><tr><th style="width:65%">Elemento</th><th style="width:20%">Tipo</th><th style="width:15%"></th></tr></thead>
+    <tbody>${all.map(x=>`<tr><td style="font-size:12px">${x.v}</td><td><span class="badge badge-open" style="font-size:10px">${x.tipo}</span></td>
+    <td><button onclick="eliminarCatalogo('${x.k}','${x.v.replace(/'/g,"\\'")}')" class="btn-sm btn-danger" style="padding:3px 8px;font-size:12px"><i class="ti ti-trash"></i></button></td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+window.agregarCatalogo=async function(){
+  const val=document.getElementById('cat-input').value.trim();
+  const tipo=document.getElementById('cat-tipo').value;
+  if(!val)return;
+  S.catalogo[tipo].push(val);
+  document.getElementById('cat-input').value='';
+  await fbSave();
+  renderCatalogo();
+};
+
+window.eliminarCatalogo=async function(tipo,val){
+  S.catalogo[tipo]=S.catalogo[tipo].filter(x=>x!==val);
+  await fbSave();renderCatalogo();
+};
+
+window.exportarCaja=function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  if(!c||!c.gastos.length){alert('Sin gastos para exportar');return;}
+  const headers=['FECHA','EQUIPO','PROVEEDOR','DESCRIPCIÓN','NO. FACTURA','UUID / FOLIO FISCAL','SUBTOTAL','IVA','TOTAL'];
+  const rows=c.gastos.map(g=>[fmtDate(g.fechaFactura),g.equipo,g.proveedor,g.descripcion,g.noFactura,g.uuid,g.subtotal,g.iva,g.total]);
+  const tSub=c.gastos.reduce((s,g)=>s+(g.subtotal||0),0);
+  const tIva=c.gastos.reduce((s,g)=>s+(g.iva||0),0);
+  const tTot=c.gastos.reduce((s,g)=>s+(g.total||0),0);
+  const data=[headers,...rows,['TOTAL DE LA CAJA','','','','','',tSub,tIva,tTot]];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[12,16,22,22,14,36,12,10,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws,'GRUPO');
+  const xlsxData=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  const zip=new JSZip();
+  zip.file(c.name+'.xlsx',xlsxData,{base64:true});
+  if(c.adjuntos){Object.values(c.adjuntos).forEach(a=>{if(a.data){zip.file('adjuntos/'+a.name,a.data.split(',')[1],{base64:true});}});}
+  zip.generateAsync({type:'base64'}).then(b64=>{
+    const a=document.createElement('a');a.href='data:application/zip;base64,'+b64;
+    a.download=c.name.replace(/\s+/g,'_')+'.zip';a.click();
+  });
+};
+
+window.exportConsolidado=function(){
+  const all=S.cajas.flatMap(c=>c.gastos.map(g=>({...g,_caja:c.name,_est:c.estatus})));
+  if(!all.length){alert('Sin gastos para exportar');return;}
+  const headers=['CAJA','FECHA','EQUIPO','PROVEEDOR','DESCRIPCIÓN','NO. FACTURA','UUID','SUBTOTAL','IVA','TOTAL','ESTATUS'];
+  const rows=all.map(g=>[g._caja,fmtDate(g.fechaFactura),g.equipo,g.proveedor,g.descripcion,g.noFactura,g.uuid,g.subtotal,g.iva,g.total,g._est==='pagado'?'Pagado':'No pagado']);
+  const tSub=all.reduce((s,g)=>s+(g.subtotal||0),0);
+  const tIva=all.reduce((s,g)=>s+(g.iva||0),0);
+  const tTot=all.reduce((s,g)=>s+(g.total||0),0);
+  const data=[headers,...rows,['TOTAL CONSOLIDADO','','','','','','',tSub,tIva,tTot,'']];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[18,12,16,22,22,14,36,12,10,12,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws,'GRUPO');
+  XLSX.writeFile(wb,'Reporte_Consolidado_GrupoTrego.xlsx');
+};
+</script>
+</body>
+</html>
