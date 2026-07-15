@@ -526,14 +526,19 @@ async function fbSave(){
 }
 
 function fbListen(){
+  if(!_db||!_doc||!_onSnapshot){
+    // Firebase aún no está listo, reintentar en 1 segundo
+    setTimeout(fbListen, 1000);
+    return;
+  }
   if(S.unsub)S.unsub();
-  let _ignorarProximo=false;
   S.unsub=_onSnapshot(_doc(_db,'app','state'),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
-    // Si el cambio vino de ESTE mismo dispositivo, ignorar (ya tenemos los datos)
+    // Si el cambio vino de ESTE mismo dispositivo, ignorar
     if(d.deviceId===DEVICE_ID){setSyncState('ok');return;}
     // Cambio de otro dispositivo — actualizar y refrescar
+    console.log('[GT] Cambio remoto de',d.updatedBy,'— actualizando...');
     S.cajas=d.cajas||[];
     S.katalogo=d.katalogo||S.katalogo;
     S.biblioteca=d.biblioteca||[];
@@ -542,7 +547,13 @@ function fbListen(){
     setSyncState('ok');
     toast(`${d.updatedBy||'Otro usuario'} actualizó los datos`);
     refreshCurrentView();
+  },(err)=>{
+    console.error('[GT] Error en listener Firebase:',err);
+    setSyncState('error');
+    // Reintentar en 3 segundos si hay error
+    setTimeout(fbListen, 3000);
   });
+  console.log('[GT] Listener Firebase activo, deviceId:',DEVICE_ID);
 }
 
 // ══════════════════════════════════════════════════
@@ -2445,7 +2456,8 @@ function initGasolina(){
         equipos:G.D.equipos,
         personas:G.D.personas,
         updatedAt:new Date().toISOString(),
-        updatedBy:S.user?.name||'sistema'
+        updatedBy:S.user?.name||'sistema',
+        deviceId:DEVICE_ID
       });
       gSetSync('ok');
     }catch(e){console.warn('Gasolina Firebase save error:',e);gSetSync('error');}
@@ -2453,25 +2465,33 @@ function initGasolina(){
 
   function gIniciarListener(){
     if(_gUnsub)_gUnsub();
-    if(!_db||!_doc||!_onSnapshot)return;
+    if(!_db||!_doc||!_onSnapshot){setTimeout(gIniciarListener,1000);return;}
     let firstLoad=true;
     _gUnsub=_onSnapshot(_doc(_db,'gasolina','datos'),snap=>{
       if(!snap.exists())return;
       const data=snap.data();
-      const otroUsuario=data.updatedBy&&data.updatedBy!==S.user?.name;
-      if(!firstLoad&&otroUsuario&&data.compras){
+      // Primer load — solo marcar como ok
+      if(firstLoad){firstLoad=false;gSetSync('ok');return;}
+      // Si el cambio vino de este mismo dispositivo, ignorar
+      if(data.deviceId===DEVICE_ID){gSetSync('ok');return;}
+      // Cambio de otro dispositivo — actualizar y refrescar
+      if(data.compras){
         G.D.compras=data.compras||[];
         G.D.cargas=data.cargas||[];
         G.D.distribuciones=data.distribuciones||[];
         G.D.proyectos=data.proyectos||G.D.proyectos;
         G.D.equipos=data.equipos||G.D.equipos;
         G.D.personas=data.personas||G.D.personas;
-        toast(`${data.updatedBy} actualizó Diesel`);
+        toast(`${data.updatedBy||'Otro usuario'} actualizó Diesel`);
         gRender();
       }
-      firstLoad=false;
       gSetSync('ok');
+    },(err)=>{
+      console.error('[GT Diesel] Error listener:',err);
+      gSetSync('error');
+      setTimeout(gIniciarListener,3000);
     });
+    console.log('[GT Diesel] Listener activo');
   }
   function gSaldoTanque(coid){const co=G.D.compras.find(c=>c.id===coid);if(!co)return 0;const cargado=G.D.cargas.filter(c=>c.compraId===coid).reduce((a,c)=>a+c.litros,0);return co.litrosDisponibles-cargado;}
   function gSaldoCarga(caid){const ca=G.D.cargas.find(c=>c.id===caid);if(!ca)return 0;const dist=G.D.distribuciones.filter(d=>d.cargaId===caid).reduce((a,d)=>a+d.litros,0);return ca.litros-dist;}
