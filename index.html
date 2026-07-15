@@ -440,7 +440,8 @@ const USERS_DEFAULT={
   '1802':{name:'Jessica',role:'admin'},
   '0218':{name:'Max',    role:'admin'},
   '7895':{name:'Jack',   role:'superadmin'},
-  '0001':{name:'Héctor', role:'viewer'}
+  '0001':{name:'Héctor', role:'viewer'},
+  '1997':{name:'Santos', role:'capturista',onlyDiesel:true}
 };
 
 const CAT_DEFAULT={
@@ -666,12 +667,19 @@ function seleccionarApp(mode){
 }
 
 function cerrarSesion(){
+  const wasOnlyDiesel=S.user?.onlyDiesel;
   clearPresence();
   if(S.unsub){S.unsub();S.unsub=null;}
-  S.user=null;S.activeCajaId=null;S.pinBuffer='';
+  if(window._G?._gUnsub){window._G._gUnsub();window._G._gUnsub=null;}
+  S.user=null;S.activeCajaId=null;S.pinBuffer='';S.appMode=null;
   document.getElementById('pin-error').style.display='none';
   updateDots();
-  showScreen('screen-welcome');
+  if(wasOnlyDiesel){
+    // Santos regresa directo al PIN de Diesel
+    seleccionarApp('gasolina');
+  }else{
+    showScreen('screen-welcome');
+  }
 }
 
 function mostrarMenuUsuario(){
@@ -694,10 +702,19 @@ async function loginOk(){
   }catch(e){console.error(e);setSyncState('error');}
   fbListen();
 
+  // Santos (onlyDiesel) va directo al módulo Diesel sin importar qué seleccionó
+  if(S.user.onlyDiesel){
+    S.appMode='gasolina';
+    setupPresence(S.user.name,S.user.role,'gasolina');
+    showScreen('screen-gasolina');
+    initGasolina();
+    return;
+  }
+
   if(S.appMode==='gasolina'){
     // Héctor (viewer) no tiene acceso al módulo Diesel
     if(S.user.role==='viewer'){
-      toast('Héctor no tiene acceso al módulo Diesel',true);
+      toast('Sin acceso al módulo Diesel',true);
       showScreen('screen-welcome');
       S.user=null;S.appMode=null;
       return;
