@@ -508,18 +508,20 @@ function setSyncState(state){
 // ══════════════════════════════════════════════════
 // FIREBASE FIRESTORE
 // ══════════════════════════════════════════════════
-// ID único por sesión/dispositivo para distinguir cambios propios vs remotos
-const DEVICE_ID = Math.random().toString(36).slice(2);
+// Timestamp del último save propio — para no procesar nuestros propios cambios
+let _lastOwnSaveTs = 0;
 
 async function fbSave(){
   setSyncState('syncing');
+  const ts = Date.now();
+  _lastOwnSaveTs = ts;
   try{
     await _setDoc(_doc(_db,'app','state'),{
       cajas:S.cajas,katalogo:S.katalogo,biblioteca:S.biblioteca,
       konfioData:S.konfioData,users:S.users,
       updatedAt:new Date().toISOString(),
       updatedBy:S.user?.name||'sistema',
-      deviceId:DEVICE_ID
+      savedTs:ts
     });
     setSyncState('ok');
   }catch(e){console.error(e);setSyncState('error');}
@@ -527,17 +529,29 @@ async function fbSave(){
 
 function fbListen(){
   if(!_db||!_doc||!_onSnapshot){
-    // Firebase aún no está listo, reintentar en 1 segundo
-    setTimeout(fbListen, 1000);
+    setTimeout(fbListen,1000);
     return;
   }
   if(S.unsub)S.unsub();
+  let _primerSnapshot=true;
   S.unsub=_onSnapshot(_doc(_db,'app','state'),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
-    // Si el cambio vino de ESTE mismo dispositivo, ignorar
-    if(d.deviceId===DEVICE_ID){setSyncState('ok');return;}
-    // Cambio de otro dispositivo — actualizar y refrescar
+    // Primer snapshot al conectar — cargar datos sin mostrar toast
+    if(_primerSnapshot){
+      _primerSnapshot=false;
+      S.cajas=d.cajas||[];
+      S.katalogo=d.katalogo||S.katalogo;
+      S.biblioteca=d.biblioteca||[];
+      S.konfioData=d.konfioData||{};
+      S.users=d.users||S.users;
+      setSyncState('ok');
+      refreshCurrentView();
+      return;
+    }
+    // Snapshots posteriores — ignorar si es nuestro propio save (mismo ts)
+    if(d.savedTs&&d.savedTs===_lastOwnSaveTs){setSyncState('ok');return;}
+    // Cambio de otro dispositivo — actualizar y notificar
     console.log('[GT] Cambio remoto de',d.updatedBy,'— actualizando...');
     S.cajas=d.cajas||[];
     S.katalogo=d.katalogo||S.katalogo;
@@ -548,12 +562,11 @@ function fbListen(){
     toast(`${d.updatedBy||'Otro usuario'} actualizó los datos`);
     refreshCurrentView();
   },(err)=>{
-    console.error('[GT] Error en listener Firebase:',err);
+    console.error('[GT] Error listener Firebase:',err);
     setSyncState('error');
-    // Reintentar en 3 segundos si hay error
-    setTimeout(fbListen, 3000);
+    setTimeout(fbListen,3000);
   });
-  console.log('[GT] Listener Firebase activo, deviceId:',DEVICE_ID);
+  console.log('[GT] Listener activo');
 }
 
 // ══════════════════════════════════════════════════
@@ -710,20 +723,10 @@ function mostrarMenuUsuario(){
 
 async function loginOk(){
   setSyncState('syncing');
-  try{
-    const {getDoc}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const snap=await getDoc(_doc(_db,'app','state'));
-    if(snap.exists()){
-      const d=snap.data();
-      S.cajas=d.cajas||[];S.katalogo=d.katalogo||S.katalogo;
-      S.biblioteca=d.biblioteca||[];S.konfioData=d.konfioData||{};
-      S.users=d.users||S.users;
-    }
-    setSyncState('ok');
-  }catch(e){console.error(e);setSyncState('error');}
+  // Arrancar listener — el primer snapshot cargará todos los datos automáticamente
   fbListen();
 
-  // Santos (onlyDiesel) va directo al módulo Diesel sin importar qué seleccionó
+  // Santos (onlyDiesel) va directo al módulo Diesel
   if(S.user.onlyDiesel){
     S.appMode='gasolina';
     setupPresence(S.user.name,S.user.role,'gasolina');
@@ -2392,42 +2395,10 @@ function initGasolina(){
   if(!G.F.re_coid&&G.D.compras.length)G.F.re_coid=G.D.compras[0].id;
   if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
 
-  // Intentar cargar desde Firestore primero
-  async function gCargarFirebase(){
-    if(!_db||!_doc)return false;
-    try{
-      const {getDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const snap=await getDoc(_doc(_db,'gasolina','datos'));
-      if(snap.exists()){
-        const data=snap.data();
-        if(data.compras?.length||data.cargas?.length){
-          G.D.compras=data.compras||[];
-          G.D.cargas=data.cargas||[];
-          G.D.distribuciones=data.distribuciones||[];
-          G.D.proyectos=data.proyectos?.length?data.proyectos:G.D.proyectos;
-          G.D.equipos=data.equipos?.length?data.equipos:G.D.equipos;
-          G.D.personas=data.personas?.length?data.personas:G.D.personas;
-          // Actualizar selecciones
-          if(!G.F.ca_coid&&G.D.compras.length)G.F.ca_coid=G.D.compras[0].id;
-          if(!G.F.di_coid&&G.D.compras.length)G.F.di_coid=G.D.compras[0].id;
-          if(!G.F.re_coid&&G.D.compras.length)G.F.re_coid=G.D.compras[0].id;
-          if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
-          return true;
-        }
-      }
-    }catch(e){console.warn('Gasolina Firebase load:',e);}
-    return false;
-  }
-
-  // Inicializar: cargar Firebase → render → activar listener en tiempo real
-  gCargarFirebase().then(loaded=>{
-    if(!loaded&&(G.D.compras.length)){
-      // Subir datos migrados a Firebase para que todos los vean
-      gGuardar();
-    }
-    gRender();
-    gIniciarListener();
-  });
+  // El listener gIniciarListener maneja la carga inicial y los cambios en tiempo real
+  // Mostrar pantalla de carga mientras llegan los datos
+  gRender();
+  gIniciarListener();
 
   function ghoy(){return new Date().toISOString().split('T')[0];}
   function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
@@ -2443,8 +2414,12 @@ function initGasolina(){
     else{dot.style.background='#f44336';lbl.textContent='Sin conexión';}
   }
 
+  let _gLastOwnSaveTs=0;
+
   async function gGuardar(){
     gSetSync('saving');
+    const ts=Date.now();
+    _gLastOwnSaveTs=ts;
     try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
     if(!_db||!_doc||!_setDoc){gSetSync('error');return;}
     try{
@@ -2457,7 +2432,7 @@ function initGasolina(){
         personas:G.D.personas,
         updatedAt:new Date().toISOString(),
         updatedBy:S.user?.name||'sistema',
-        deviceId:DEVICE_ID
+        savedTs:ts
       });
       gSetSync('ok');
     }catch(e){console.warn('Gasolina Firebase save error:',e);gSetSync('error');}
@@ -2466,23 +2441,44 @@ function initGasolina(){
   function gIniciarListener(){
     if(_gUnsub)_gUnsub();
     if(!_db||!_doc||!_onSnapshot){setTimeout(gIniciarListener,1000);return;}
-    let firstLoad=true;
+    let _primerSnapshot=true;
     _gUnsub=_onSnapshot(_doc(_db,'gasolina','datos'),snap=>{
       if(!snap.exists())return;
       const data=snap.data();
-      // Primer load — solo marcar como ok
-      if(firstLoad){firstLoad=false;gSetSync('ok');return;}
-      // Si el cambio vino de este mismo dispositivo, ignorar
-      if(data.deviceId===DEVICE_ID){gSetSync('ok');return;}
-      // Cambio de otro dispositivo — actualizar y refrescar
+      // Primer snapshot — cargar todo el historial sin toast
+      if(_primerSnapshot){
+        _primerSnapshot=false;
+        if(data.compras?.length||data.cargas?.length){
+          G.D.compras=data.compras||[];
+          G.D.cargas=data.cargas||[];
+          G.D.distribuciones=data.distribuciones||[];
+          if(data.proyectos?.length)G.D.proyectos=data.proyectos;
+          if(data.equipos?.length)G.D.equipos=data.equipos;
+          if(data.personas?.length)G.D.personas=data.personas;
+          if(G.D.compras.length){
+            G.F.ca_coid=G.D.compras[0].id;
+            G.F.di_coid=G.D.compras[0].id;
+            G.F.re_coid=G.D.compras[0].id;
+          }
+          if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
+          gRender();
+        }
+        gSetSync('ok');
+        return;
+      }
+      // Snapshots posteriores — ignorar si es nuestro propio save
+      if(data.savedTs&&data.savedTs===_gLastOwnSaveTs){gSetSync('ok');return;}
+      // Cambio de otro dispositivo — actualizar y notificar
       if(data.compras){
         G.D.compras=data.compras||[];
         G.D.cargas=data.cargas||[];
         G.D.distribuciones=data.distribuciones||[];
-        G.D.proyectos=data.proyectos||G.D.proyectos;
-        G.D.equipos=data.equipos||G.D.equipos;
-        G.D.personas=data.personas||G.D.personas;
-        toast(`${data.updatedBy||'Otro usuario'} actualizó Diesel`);
+        if(data.proyectos?.length)G.D.proyectos=data.proyectos;
+        if(data.equipos?.length)G.D.equipos=data.equipos;
+        if(data.personas?.length)G.D.personas=data.personas;
+        if(data.updatedBy&&data.updatedBy!==S.user?.name){
+          toast(`${data.updatedBy} actualizó Diesel`);
+        }
         gRender();
       }
       gSetSync('ok');
