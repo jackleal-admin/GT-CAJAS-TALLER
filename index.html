@@ -2338,9 +2338,23 @@ window.exportarKonfio=function(){
 // ══════════════════════════════════════════════════
 // MÓDULO GASOLINA — Control de Diesel (diesel42, sin cambios funcionales)
 // ══════════════════════════════════════════════════
+function gRenderFromG(G){
+  const tabs=document.getElementById('gasolina-tabs');
+  const app=document.getElementById('gasolina-app');
+  if(!tabs||!app)return;
+  // Re-usar las funciones de render del G existente
+  if(window._G&&window._G._gRender)window._G._gRender();
+}
+
 function initGasolina(){
   if(!window._G)window._G={};
   const G=window._G;
+  // Si ya está inicializado y tiene datos, solo re-renderizar
+  if(G._initialized){
+    gRenderFromG(G);
+    return;
+  }
+  G._initialized=true;
 
   const SEED_PROYECTOS=[
     ['26045','EMCS F1'],['23021','ESMERALDAS'],['26046','DRENAJE GEPSA'],
@@ -2406,9 +2420,9 @@ function initGasolina(){
   if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
 
   // El listener gIniciarListener maneja la carga inicial y los cambios en tiempo real
-  // Mostrar pantalla de carga mientras llegan los datos
+  // Pequeño delay para que el módulo se muestre antes de que llegue Firebase
   gRender();
-  gIniciarListener();
+  setTimeout(gIniciarListener, 300);
 
   function ghoy(){return new Date().toISOString().split('T')[0];}
   function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
@@ -2471,6 +2485,7 @@ function initGasolina(){
       if(_primerSnapshot){
         _primerSnapshot=false;
         if(data.compras?.length||data.cargas?.length){
+          const tabActual=G.F.tab; // Preservar tab actual
           G.D.compras=data.compras||[];
           G.D.cargas=data.cargas||[];
           G.D.distribuciones=data.distribuciones||[];
@@ -2483,6 +2498,7 @@ function initGasolina(){
             G.F.re_coid=G.D.compras[0].id;
           }
           if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
+          G.F.tab=tabActual; // Restaurar tab que el usuario eligió
           gRender();
         }
         gSetSync('ok');
@@ -2490,14 +2506,16 @@ function initGasolina(){
       }
       // Snapshots posteriores — ignorar si es nuestro propio save
       if(data.savedTs&&data.savedTs===_gLastOwnSaveTs){gSetSync('ok');return;}
-      // Cambio de otro dispositivo — actualizar y notificar
+      // Cambio de otro dispositivo — actualizar sin interrumpir al usuario
       if(data.compras){
+        const tabActual=G.F.tab; // Preservar tab actual
         G.D.compras=data.compras||[];
         G.D.cargas=data.cargas||[];
         G.D.distribuciones=data.distribuciones||[];
         if(data.proyectos?.length)G.D.proyectos=data.proyectos;
         if(data.equipos?.length)G.D.equipos=data.equipos;
         if(data.personas?.length)G.D.personas=data.personas;
+        G.F.tab=tabActual; // Restaurar tab
         if(data.updatedBy&&data.updatedBy!==S.user?.name){
           toast(`${data.updatedBy} actualizó Diesel`);
         }
@@ -2530,9 +2548,16 @@ function initGasolina(){
     const app=document.getElementById('gasolina-app');
     if(!tabs||!app)return;
     tabs.innerHTML=['🛒 Compra','⛽ Pipa','🔧 Surtir','📊 Resumen','📋 Catál.'].map((t,i)=>
-      `<button class="tb${G.F.tab===i?' act':''}" onclick="_G.setTab(${i})">${t}</button>`).join('');
+      `<button class="tb${G.F.tab===i?' act':''}" onclick="window._gTab(${i})">${t}</button>`).join('');
     app.innerHTML=[gRCompra,gRPipa,gRSurtir,gRResumen,gRCatalogo][G.F.tab]();
   }
+  G._gRender=gRender;
+
+  // Función global para cambiar tabs — no depende de _G
+  window._gTab=function(i){
+    if(!window._G)return;
+    window._G.setTab(i);
+  };
 
   function gGuardarLocal(){
     try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
