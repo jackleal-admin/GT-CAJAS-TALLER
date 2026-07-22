@@ -509,68 +509,93 @@ function setSyncState(state){
 // FIREBASE FIRESTORE
 // ══════════════════════════════════════════════════
 // Timestamp del último save propio — para no procesar nuestros propios cambios
-let _lastOwnSaveTs = 0;
-
 async function fbSave(){
   setSyncState('syncing');
-  const ts = Date.now();
-  _lastOwnSaveTs = ts;
   try{
-    await _setDoc(_doc(_db,'app','state'),{
-      cajas:S.cajas,katalogo:S.katalogo,biblioteca:S.biblioteca,
-      konfioData:S.konfioData,users:S.users,
-      updatedAt:new Date().toISOString(),
-      updatedBy:S.user?.name||'sistema',
-      savedTs:ts
-    });
+    const payload={
+      cajas:S.cajas,
+      katalogo:S.katalogo,
+      biblioteca:S.biblioteca,
+      konfioData:S.konfioData,
+      users:S.users,
+      updatedAt:Date.now(),
+      updatedBy:S.user?.name||'sistema'
+    };
+    // Incluir datos de Diesel si están cargados
+    if(window._G?.D){
+      payload.dieselCompras=window._G.D.compras||[];
+      payload.dieselCargas=window._G.D.cargas||[];
+      payload.dieselDistribuciones=window._G.D.distribuciones||[];
+      payload.dieselProyectos=window._G.D.proyectos||[];
+      payload.dieselEquipos=window._G.D.equipos||[];
+      payload.dieselPersonas=window._G.D.personas||[];
+    }
+    await _setDoc(_doc(_db,'app','state'),payload);
     setSyncState('ok');
-  }catch(e){console.error(e);setSyncState('error');}
+  }catch(e){
+    console.error('[GT] Error guardando:',e);
+    setSyncState('error');
+  }
 }
 
 function fbListen(){
   if(!_db||!_doc||!_onSnapshot){
-    setTimeout(fbListen,1000);
+    setTimeout(fbListen,500);
     return;
   }
   if(S.unsub)S.unsub();
-  let _primerSnapshot=true;
   S.unsub=_onSnapshot(_doc(_db,'app','state'),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
-    // Primer snapshot al conectar — cargar datos sin mostrar toast
-    if(_primerSnapshot){
-      _primerSnapshot=false;
-      S.cajas=d.cajas||[];
-      S.katalogo=d.katalogo||S.katalogo;
-      S.biblioteca=d.biblioteca||[];
-      S.konfioData=d.konfioData||{};
-      S.users=d.users||S.users;
-      setSyncState('ok');
-      refreshCurrentView();
-      return;
-    }
-    // Snapshots posteriores — ignorar si es nuestro propio save (mismo ts)
-    if(d.savedTs&&d.savedTs===_lastOwnSaveTs){setSyncState('ok');return;}
-    // Cambio de otro dispositivo — actualizar y notificar
-    console.log('[GT] Cambio remoto de',d.updatedBy,'— actualizando...');
+    // Siempre actualizar con los datos más recientes de Firebase
     S.cajas=d.cajas||[];
     S.katalogo=d.katalogo||S.katalogo;
     S.biblioteca=d.biblioteca||[];
     S.konfioData=d.konfioData||{};
     S.users=d.users||S.users;
+    // Guardar datos de Diesel en S para que estén disponibles cuando se abra el módulo
+    if(d.dieselCompras){
+      S.dieselData={
+        compras:d.dieselCompras||[],
+        cargas:d.dieselCargas||[],
+        distribuciones:d.dieselDistribuciones||[],
+        proyectos:d.dieselProyectos||[],
+        equipos:d.dieselEquipos||[],
+        personas:d.dieselPersonas||[]
+      };
+      // Si _G ya está inicializado (usuario está en Diesel), actualizar en vivo
+      if(window._G?.D){
+        const G=window._G;
+        const tabActual=G.F?.tab||0;
+        G.D.compras=d.dieselCompras||[];
+        G.D.cargas=d.dieselCargas||[];
+        G.D.distribuciones=d.dieselDistribuciones||[];
+        if(d.dieselProyectos?.length)G.D.proyectos=d.dieselProyectos;
+        if(d.dieselEquipos?.length)G.D.equipos=d.dieselEquipos;
+        if(d.dieselPersonas?.length)G.D.personas=d.dieselPersonas;
+        if(G.F)G.F.tab=tabActual;
+      }
+    }
     setSyncState('ok');
-    toast(`${d.updatedBy||'Otro usuario'} actualizó los datos`);
+    if(d.updatedBy&&d.updatedBy!==S.user?.name){
+      toast(`${d.updatedBy} actualizó los datos`);
+    }
     refreshCurrentView();
   },(err)=>{
-    console.error('[GT] Error listener Firebase:',err);
+    console.error('[GT] Error listener:',err);
     setSyncState('error');
     setTimeout(fbListen,3000);
   });
   console.log('[GT] Listener activo');
 }
 
-// ══════════════════════════════════════════════════
-// FIREBASE STORAGE — subida de adjuntos
+// ── WRAPPERS GLOBALES PARA DIESEL ─────────────────
+// Evitan errores si _G no está disponible todavía
+window._gSafe=function(fn,...args){
+  try{if(window._G&&window._G[fn])window._G[fn](...args);}catch(e){console.error('_G.'+fn+' error:',e);}
+};
+window._gTab=function(i){window._gSafe('setTab',i);};
+
 // ══════════════════════════════════════════════════
 async function uploadToStorage(file,path){
   if(!_storage||!_storageRef||!_uploadBytes||!_getDownloadURL)throw new Error('Storage no inicializado');
@@ -586,11 +611,9 @@ async function deleteFromStorage(path){
 
 let _refreshTimer=null;
 function refreshCurrentView(){
-  // No refrescar si el usuario está escribiendo en un input activo
   const active=document.activeElement;
   const isTyping=active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT');
   if(isTyping){
-    // Intentar de nuevo en 2 segundos cuando deje de escribir
     clearTimeout(_refreshTimer);
     _refreshTimer=setTimeout(refreshCurrentView,2000);
     return;
@@ -606,6 +629,8 @@ function refreshCurrentView(){
   }
   if(cur==='screen-caja')renderCajaContent();
   if(cur==='screen-konfio')renderKonfio();
+  // Diesel — si hay un _G inicializado, re-renderizar
+  if(cur==='screen-gasolina'&&window._G?._gRender)window._G._gRender();
 }
 
 // ══════════════════════════════════════════════════
@@ -746,7 +771,7 @@ async function loginOk(){
   }
 
   if(S.appMode==='gasolina'){
-    // Héctor (viewer) no tiene acceso al módulo Diesel
+    // Solo Santos, América, Jack, Jessica, Max pueden entrar a Diesel
     if(S.user.role==='viewer'){
       toast('Sin acceso al módulo Diesel',true);
       showScreen('screen-welcome');
@@ -757,6 +782,13 @@ async function loginOk(){
     showScreen('screen-gasolina');
     initGasolina();
   }else if(S.appMode==='konfio'){
+    // Héctor solo puede entrar a Cajas de Gastos
+    if(S.user.role==='viewer'){
+      toast('Sin acceso a KONFIO',true);
+      showScreen('screen-welcome');
+      S.user=null;S.appMode=null;
+      return;
+    }
     document.getElementById('konfio-user-chip').textContent=S.user.name;
     setupPresence(S.user.name,S.user.role,'konfio');
     showScreen('screen-konfio');
@@ -1229,20 +1261,6 @@ function buildFormSF(){
     </div>
     <div style="margin-top:8px"><div class="label">descripción *</div><input type="text" id="sf-desc" placeholder="Ej. MATERIAL DE LIMPIEZA, VIÁTICOS…"></div>
     <div style="margin-top:8px"><div class="label">monto *</div><input type="number" id="sf-monto" placeholder="0.00" step="0.01" min="0"></div>
-    <div style="margin-top:8px">
-      <div class="label">adjuntar foto o ticket (opcional)</div>
-      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--gold-xlight);border:1px solid var(--gold-light);padding:8px 12px;border-radius:8px;font-size:13px">
-          <i class="ti ti-camera" style="color:var(--gold)"></i> Tomar foto
-          <input type="file" id="sf-adjunto-cam" accept="image/*" capture="environment" style="display:none" onchange="sfAdjuntoChange(this)">
-        </label>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--gold-xlight);border:1px solid var(--gold-light);padding:8px 12px;border-radius:8px;font-size:13px">
-          <i class="ti ti-paperclip" style="color:var(--gold)"></i> Elegir archivo
-          <input type="file" id="sf-adjunto" accept="image/*,.pdf" style="display:none" onchange="sfAdjuntoChange(this)">
-        </label>
-        <span id="sf-adjunto-name" style="font-size:12px;color:var(--text2);align-self:center"></span>
-      </div>
-    </div>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="btn-gold" onclick="registrarGastoSF()"><i class="ti ti-plus"></i> Registrar</button>
       <button onclick="limpiarFormSF()"><i class="ti ti-refresh"></i> Limpiar</button>
@@ -1317,7 +1335,7 @@ window.parseXML=function(e,ctx){
     if(alertEl)alertEl.innerHTML=`<div class="alert alert-ok"><i class="ti ti-circle-check"></i> XML cargado — ${res.nombre||res.rfc}</div>`;
     if(res.uuid){
       const exists=S.biblioteca.find(x=>x.uuid===res.uuid);
-      if(!exists){S.biblioteca.push({uuid:res.uuid,rfc:res.rfc,nombre:res.nombre,noFact:res.noFact,fecha:res.fecha,subtotal:res.subtotal,iva:res.iva,total:res.total,usado:false});fbSave();}
+      if(!exists){S.biblioteca.push({uuid:res.uuid,rfc:res.rfc,nombre:res.nombre,noFact:res.noFact,fecha:res.fecha,subtotal:res.subtotal,iva:res.iva,total:res.total,usado:false});}
     }
   };
   reader.readAsText(file,'UTF-8');
@@ -2398,16 +2416,22 @@ function initGasolina(){
   };
 
   // Cargar desde localStorage (trego_diesel_v3) o usar datos migrados como fallback
+  // PRIORIDAD: S.dieselData (de Firebase via fbListen) > localStorage > MIGRATED_DATA
   try{
-    const raw=localStorage.getItem('trego_diesel_v3')||localStorage.getItem('trego_v3');
-    const s=raw?JSON.parse(raw):null;
-    if(s?.D&&(s.D.compras?.length||s.D.cargas?.length)){
-      G.D=s.D;
+    if(S.dieselData?.compras?.length||S.dieselData?.cargas?.length){
+      // Datos frescos de Firebase ya cargados por fbListen — usar estos
+      G.D=JSON.parse(JSON.stringify(S.dieselData));
     }else{
-      G.D=JSON.parse(JSON.stringify(MIGRATED_DATA));
-      localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));
+      const raw=localStorage.getItem('trego_diesel_v3')||localStorage.getItem('trego_v3');
+      const s=raw?JSON.parse(raw):null;
+      if(s?.D&&(s.D.compras?.length||s.D.cargas?.length)){
+        G.D=s.D;
+      }else{
+        G.D=JSON.parse(JSON.stringify(MIGRATED_DATA));
+        localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));
+      }
+      if(s?.F)G.F=Object.assign(G.F,s.F);
     }
-    if(s?.F)G.F=Object.assign(G.F,s.F);
   }catch(e){
     G.D=JSON.parse(JSON.stringify(MIGRATED_DATA));
   }
@@ -2438,15 +2462,12 @@ function initGasolina(){
     else{dot.style.background='#f44336';lbl.textContent='Sin conexión';}
   }
 
-  let _gLastOwnSaveTs=0;
-
   async function gGuardar(){
     gSetSync('saving');
-    const ts=Date.now();
-    _gLastOwnSaveTs=ts;
     try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
     if(!_db||!_doc||!_setDoc){gSetSync('error');return;}
     try{
+      // Guardar en documento propio de Diesel (gasolina/datos)
       await _setDoc(_doc(_db,'gasolina','datos'),{
         compras:G.D.compras,
         cargas:G.D.cargas,
@@ -2454,12 +2475,14 @@ function initGasolina(){
         proyectos:G.D.proyectos,
         equipos:G.D.equipos,
         personas:G.D.personas,
-        updatedAt:new Date().toISOString(),
-        updatedBy:S.user?.name||'sistema',
-        savedTs:ts
+        updatedAt:Date.now(),
+        updatedBy:S.user?.name||'sistema'
       });
+      // También guardar en documento principal (app/state) para que TODOS los usuarios lo vean
+      // sin importar en qué módulo estén
+      await fbSave();
       gSetSync('ok');
-    }catch(e){console.warn('Gasolina Firebase save error:',e);gSetSync('error');}
+    }catch(e){console.warn('[GT Diesel] Error guardando:',e);gSetSync('error');}
   }
 
   let _gRefreshTimer=null;
@@ -2476,46 +2499,29 @@ function initGasolina(){
 
   function gIniciarListener(){
     if(_gUnsub)_gUnsub();
-    if(!_db||!_doc||!_onSnapshot){setTimeout(gIniciarListener,1000);return;}
-    let _primerSnapshot=true;
+    if(!_db||!_doc||!_onSnapshot){setTimeout(gIniciarListener,500);return;}
     _gUnsub=_onSnapshot(_doc(_db,'gasolina','datos'),snap=>{
       if(!snap.exists())return;
       const data=snap.data();
-      // Primer snapshot — cargar todo el historial sin toast
-      if(_primerSnapshot){
-        _primerSnapshot=false;
-        if(data.compras?.length||data.cargas?.length){
-          const tabActual=G.F.tab; // Preservar tab actual
-          G.D.compras=data.compras||[];
-          G.D.cargas=data.cargas||[];
-          G.D.distribuciones=data.distribuciones||[];
-          if(data.proyectos?.length)G.D.proyectos=data.proyectos;
-          if(data.equipos?.length)G.D.equipos=data.equipos;
-          if(data.personas?.length)G.D.personas=data.personas;
-          if(G.D.compras.length){
-            G.F.ca_coid=G.D.compras[0].id;
-            G.F.di_coid=G.D.compras[0].id;
-            G.F.re_coid=G.D.compras[0].id;
-          }
-          if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
-          G.F.tab=tabActual; // Restaurar tab que el usuario eligió
-          gRender();
-        }
-        gSetSync('ok');
-        return;
-      }
-      // Snapshots posteriores — ignorar si es nuestro propio save
-      if(data.savedTs&&data.savedTs===_gLastOwnSaveTs){gSetSync('ok');return;}
-      // Cambio de otro dispositivo — actualizar sin interrumpir al usuario
+      // Siempre actualizar con los datos de Firebase
       if(data.compras){
-        const tabActual=G.F.tab; // Preservar tab actual
+        const tabActual=G.F.tab;
         G.D.compras=data.compras||[];
         G.D.cargas=data.cargas||[];
         G.D.distribuciones=data.distribuciones||[];
         if(data.proyectos?.length)G.D.proyectos=data.proyectos;
         if(data.equipos?.length)G.D.equipos=data.equipos;
         if(data.personas?.length)G.D.personas=data.personas;
-        G.F.tab=tabActual; // Restaurar tab
+        if(G.D.compras.length&&!G.F.ca_coid){
+          G.F.ca_coid=G.D.compras[0].id;
+          G.F.di_coid=G.D.compras[0].id;
+          G.F.re_coid=G.D.compras[0].id;
+        }
+        if(!G.F.di_caid){const c=G.D.cargas.find(c=>c.compraId===G.F.di_coid);if(c)G.F.di_caid=c.id;}
+        G.F.tab=tabActual;
+        // Mantener S.dieselData actualizado
+        S.dieselData={compras:G.D.compras,cargas:G.D.cargas,distribuciones:G.D.distribuciones,
+          proyectos:G.D.proyectos,equipos:G.D.equipos,personas:G.D.personas};
         if(data.updatedBy&&data.updatedBy!==S.user?.name){
           toast(`${data.updatedBy} actualizó Diesel`);
         }
@@ -2552,12 +2558,6 @@ function initGasolina(){
     app.innerHTML=[gRCompra,gRPipa,gRSurtir,gRResumen,gRCatalogo][G.F.tab]();
   }
   G._gRender=gRender;
-
-  // Función global para cambiar tabs — no depende de _G
-  window._gTab=function(i){
-    if(!window._G)return;
-    window._G.setTab(i);
-  };
 
   function gGuardarLocal(){
     try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
