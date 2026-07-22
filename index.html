@@ -3124,5 +3124,25 @@ document.addEventListener('keydown',e=>{
   }
 });
 </script>
+
+<script>
+// ── AUTO-UPDATE — Verificar nueva versión cada 5 minutos ──
+(function(){
+  const VER_KEY='gt-app-version';
+  // Guardar timestamp de esta versión al cargar
+  const currentLoad=Date.now();
+  setInterval(async()=>{
+    try{
+      const r=await fetch(location.href+'?v='+Date.now(),{cache:'no-store'});
+      const txt=await r.text();
+      // Si el HTML cambió (diferente longitud), recargar
+      if(txt.length&&Math.abs(txt.length-document.documentElement.outerHTML.length)>500){
+        console.log('[GT] Nueva versión detectada — actualizando...');
+        location.reload(true);
+      }
+    }catch(e){}
+  },5*60*1000);
+})();
+</script>
 </body>
 </html>
