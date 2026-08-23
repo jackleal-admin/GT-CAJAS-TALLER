@@ -7,6 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNDMkFCNzQiLz48dGV4dCB4PSIzMiIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSIyOCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdUPC90ZXh0Pjwvc3ZnPg==">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#C2AB74">
+<meta name="gt-build" content="2026082301">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -776,6 +777,14 @@ async function fbSave(){
       payload.dieselPersonas=window._G.D.personas||[];
       payload.dieselConductoresPipaIds=window._G.D.conductoresPipaIds||[];
     }
+    // Firestore tiene un límite duro de 1 MB por documento. Todo lo de esta
+    // empresa (cajas, historial, adjuntos que cayeron a base64) vive en UN
+    // solo documento, así que avisamos antes de llegar al límite — si se
+    // alcanza, dejarían de poder guardarse cambios para todos.
+    const payloadSizeKB=Math.round(JSON.stringify(payload).length/1024);
+    if(payloadSizeKB>900){
+      toast(`⚠️ La base de datos de ${S.empresa==='cgt'?'Comercial GT':'Grupo Trego'} está casi llena (${payloadSizeKB} KB de ~1024 KB). Avisa a Jack — puede que pronto no se puedan guardar más cambios.`,true);
+    }
     const docPath=getEmpresaDoc();
     const parts=docPath.split('/');
     await _setDoc(_doc(_db,parts[0],parts[1]),payload);
@@ -917,8 +926,16 @@ function setupPresence(userName,userRole,screenName){
   // Listen all presence
   S.unsubPresence=_onValue(_ref(_rtdb,'presence'),(snap)=>{
     const all=[];
+    const now=Date.now();
     snap.forEach(child=>{
-      all.push({id:child.key,...child.val()});
+      const val=child.val()||{};
+      all.push({id:child.key,...val});
+      // Limpieza de presencia fantasma: si no hay señal de actividad en más
+      // de 2 min (el heartbeat manda una cada 20s), el registro quedó huérfano
+      // — normalmente por cierre abrupto del navegador — y se elimina.
+      if(now-(val.ts||0)>120000){
+        try{_remove(_ref(_rtdb,'presence/'+child.key));}catch(e){}
+      }
     });
     renderPresenceBars(all,presId,screenName);
   });
@@ -1547,6 +1564,9 @@ function renderCajaContent(){
     adminActions=c.estado==='abierta'
       ?`<button onclick="cerrarCaja()" class="btn-sm btn-danger" style="margin-top:8px"><i class="ti ti-lock"></i> Cerrar caja</button>`
       :`<div class="alert alert-info" style="margin-top:8px"><i class="ti ti-lock"></i> Caja cerrada — solo lectura</div>`;
+    if(c.estado==='cerrada'&&esJackOJennifer()){
+      adminActions+=`<button onclick="reabrirCaja()" class="btn-sm btn-gold" style="margin-top:6px;margin-left:6px"><i class="ti ti-lock-open"></i> Reabrir caja</button>`;
+    }
     if(isSuperAdmin()&&c.estado==='cerrada'&&c.estatus==='pagado'){
       adminActions+=`<button onclick="eliminarCaja()" class="btn-sm btn-danger" style="margin-top:6px;margin-left:6px"><i class="ti ti-trash"></i> Eliminar caja</button>`;
     }
@@ -1916,6 +1936,7 @@ window.registrarGastoCF=async function(){
       // fallback a base64 si falla Storage
       c=S.cajas.find(x=>x.id===activeId)||c;
       await new Promise(res=>{const r=new FileReader();r.onload=ev=>{if(!c.adjuntos)c.adjuntos={};c.adjuntos[gasto.id]={name:adjFile.name,data:ev.target.result};res();};r.readAsDataURL(adjFile);});
+      toast('⚠️ No se pudo subir el archivo a la nube — se guardó directo en la base de datos compartida. Revisa tu conexión; si esto pasa seguido, avisa a Jack.',true);
     }
   }
   // Re-obtener la caja justo antes de escribir: mientras subíamos el archivo pudo llegar
@@ -1950,6 +1971,7 @@ window.registrarGastoSF=async function(){
     }catch(e){
       c=S.cajas.find(x=>x.id===activeId)||c;
       await new Promise(res=>{const r=new FileReader();r.onload=ev=>{if(!c.adjuntos)c.adjuntos={};c.adjuntos[gasto.id]={name:adjFile.name,data:ev.target.result};res();};r.readAsDataURL(adjFile);});
+      toast('⚠️ No se pudo subir el archivo a la nube — se guardó directo en la base de datos compartida. Revisa tu conexión; si esto pasa seguido, avisa a Jack.',true);
     }
   }
   // Re-obtener la caja justo antes de escribir (ver nota de condición de carrera en registrarGastoCF)
@@ -2048,6 +2070,17 @@ window.cerrarCaja=async function(){
   c.estado='cerrada';
   c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Caja cerrada'});
   await fbSave();toast('Caja cerrada');abrirCaja(S.activeCajaId);
+};
+
+// Reabrir caja — solo Jack y Jennifer, cada quien dentro de las empresas
+// a las que ya tiene acceso (Jack: GT y CGT · Jennifer: CGT)
+window.reabrirCaja=async function(){
+  if(!esJackOJennifer()){toast('Sin permiso para reabrir cajas',true);return;}
+  if(!confirm('¿Reabrir esta caja? Se podrán volver a registrar y editar gastos.'))return;
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  c.estado='abierta';
+  c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Caja reabierta'});
+  await fbSave();toast('Caja reabierta ✓');abrirCaja(S.activeCajaId);
 };
 
 window.eliminarCaja=async function(){
@@ -3514,20 +3547,50 @@ document.addEventListener('keydown',e=>{
 
 <script>
 // ── AUTO-UPDATE — Verificar nueva versión cada 5 minutos ──
+// Compara la etiqueta <meta name="gt-build"> del servidor contra la actual.
+// Esto evita falsos positivos: el HTML en pantalla crece con cajas, modales,
+// gráficas, etc. mientras el usuario trabaja, así que comparar el tamaño
+// total del documento (como antes) detectaba "cambios" que no eran reales
+// y recargaba la app a media sesión sin avisar.
 (function(){
-  const VER_KEY='gt-app-version';
-  // Guardar timestamp de esta versión al cargar
-  const currentLoad=Date.now();
-  setInterval(async()=>{
+  const CURRENT_BUILD=document.querySelector('meta[name="gt-build"]')?.content||'';
+
+  function isUserBusy(){
+    const el=document.activeElement;
+    if(!el)return false;
+    const tag=el.tagName;
+    // No interrumpir si está escribiendo en un campo o hay un modal abierto
+    return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||!!document.querySelector('.modal-overlay');
+  }
+
+  let pendingReload=false;
+
+  async function checkVersion(){
     try{
       const r=await fetch(location.href+'?v='+Date.now(),{cache:'no-store'});
       const txt=await r.text();
-      // Si el HTML cambió (diferente longitud), recargar
-      if(txt.length&&Math.abs(txt.length-document.documentElement.outerHTML.length)>500){
-        console.log('[GT] Nueva versión detectada — actualizando...');
-        location.reload(true);
+      const match=txt.match(/<meta\s+name="gt-build"\s+content="([^"]*)"/i);
+      const serverBuild=match?match[1]:'';
+      if(!serverBuild||!CURRENT_BUILD)return; // sin dato confiable, no arriesgar recarga
+      if(serverBuild!==CURRENT_BUILD){
+        pendingReload=true;
+        if(!isUserBusy()){
+          console.log('[GT] Nueva versión detectada — actualizando...');
+          location.reload(true);
+        }else{
+          // Reintenta más seguido hasta que el usuario deje de estar activo
+          console.log('[GT] Nueva versión detectada — esperando a que el usuario termine...');
+        }
       }
     }catch(e){}
+  }
+
+  setInterval(()=>{
+    if(pendingReload){
+      if(!isUserBusy())location.reload(true);
+      return;
+    }
+    checkVersion();
   },5*60*1000);
 })();
 </script>
