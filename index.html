@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNDMkFCNzQiLz48dGV4dCB4PSIzMiIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSIyOCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdUPC90ZXh0Pjwvc3ZnPg==">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#C2AB74">
-<meta name="gt-build" content="2026082404">
+<meta name="gt-build" content="2026093003">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -44,6 +44,7 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:var(--bg);colo
 .welcome-q{opacity:0;animation:fadeUp .8s ease forwards 1.5s;font-size:21px;font-weight:800;color:var(--negro);margin-top:50px;margin-bottom:28px}
 .welcome-btns{opacity:0;animation:fadeUp .8s ease forwards 1.8s;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px;max-width:700px;margin:0 auto}
 .welcome-btn{position:relative;overflow:hidden;padding:34px 16px;border-radius:20px;font-size:15px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;border:none;transition:transform .15s,box-shadow .3s;white-space:normal}
+@media(max-width:480px){.welcome-inner{padding:40px 16px;width:100%}.welcome-title{font-size:32px}.welcome-btns{grid-template-columns:1fr 1fr!important;gap:12px;width:100%}.welcome-btn{padding:26px 10px;font-size:13px}}
 .welcome-btn:hover{transform:translateY(-3px)}
 .welcome-btn:hover{transform:translateY(-2px)}
 .btn-cajas{background:linear-gradient(270deg,var(--gold),var(--gold-dark),var(--gold));background-size:200% 200%;animation:gradientMove 4s ease infinite;color:#fff;box-shadow:0 8px 32px rgba(194,171,116,.5)}
@@ -413,7 +414,7 @@ function animateEmpTitle(el){
       <div class="welcome-title">GRUPO TREGO</div>
       <div class="welcome-sub">Sistema de Gastos</div>
       <div class="welcome-q">¿Qué módulo deseas usar?</div>
-      <div class="welcome-btns">
+      <div class="welcome-btns" style="max-width:420px">
         <button class="welcome-btn btn-cajas" onclick="seleccionarApp('cajas')">
           <div><i class="ti ti-folders" style="font-size:30px;display:block;margin-bottom:10px"></i>Cajas de Gastos</div>
         </button>
@@ -426,9 +427,6 @@ function animateEmpTitle(el){
         <button class="welcome-btn btn-konfio" onclick="seleccionarApp('ordenes')" style="position:relative">
           <i class="ti ti-lock" style="position:absolute;top:8px;right:14px;font-size:11px;opacity:.7"></i>
           <div><i class="ti ti-file-invoice" style="font-size:30px;display:block;margin-bottom:10px"></i>Órdenes</div>
-        </button>
-        <button class="welcome-btn btn-konfio" onclick="entrarProveedores()" style="background:#fff;border-color:#9A3B33;color:#9A3B33">
-          <div><i class="ti ti-building-warehouse" style="font-size:30px;display:block;margin-bottom:10px"></i>Control Proveedores</div>
         </button>
       </div>
     </div>
@@ -494,52 +492,6 @@ function animateEmpTitle(el){
   </div>
 </div>
 
-
-<!-- CONTROL PROVEEDORES: módulo completo -->
-<div id="screen-proveedores" class="screen">
-  <div class="topbar">
-    <div style="display:flex;align-items:center">
-      <div class="logo-badge" style="background:#9A3B33">CP</div>
-      <div class="topbar-info">
-        <div class="topbar-title" id="prov-empresa-title">Control Proveedores</div>
-        <div class="topbar-sub">Grupo Trego</div>
-      </div>
-    </div>
-    <div class="topbar-user">
-      <span id="prov-sync-label" style="font-size:11px;opacity:.6;margin-right:10px">Conectando...</span>
-      <span id="prov-user-chip"></span>
-      <button onclick="salirProveedores()" style="margin-left:10px" title="Salir"><i class="ti ti-logout"></i></button>
-    </div>
-  </div>
-
-  <div class="container" id="prov-menu">
-    <div class="menu-title">¿Qué necesitas hacer?</div>
-    <div class="menu-grid">
-      <div class="menu-card active" onclick="mostrarSeccionProv('dashboard')"><div class="menu-ico" style="background:#EBF5FB"><i class="ti ti-chart-bar" style="color:#1565C0"></i></div><div class="menu-label">Dashboard</div></div>
-      <div class="menu-card" onclick="mostrarSeccionProv('lista')"><div class="menu-ico" style="background:#F3E8FB"><i class="ti ti-building-store" style="color:#7B2D9E"></i></div><div class="menu-label">Proveedores</div></div>
-      <div class="menu-card" onclick="mostrarSeccionProv('expedientes')"><div class="menu-ico" style="background:#FEF9EC"><i class="ti ti-folder" style="color:var(--gold-dark)"></i></div><div class="menu-label">Expedientes</div></div>
-      <div class="menu-card" onclick="mostrarSeccionProv('incompletos')"><div class="menu-ico" style="background:#FFF3E0"><i class="ti ti-alert-triangle" style="color:#E65100"></i></div><div class="menu-label">Incompletos</div></div>
-      <div class="menu-card" onclick="mostrarSeccionProv('nuevo')"><div class="menu-ico" style="background:#FBEAE8"><i class="ti ti-plus" style="color:#9A3B33"></i></div><div class="menu-label">Nuevo Proveedor</div></div>
-    </div>
-    <button onclick="salirProveedores()" style="margin-top:16px;color:var(--gold-dark);font-weight:700;font-size:13px"><i class="ti ti-arrow-left"></i> Salir al inicio</button>
-  </div>
-
-  <div class="container" id="prov-seccion" style="display:none">
-    <button onclick="volverProvMenu()" style="margin-bottom:16px;background:transparent;border:1.5px solid var(--border);padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;color:var(--gold-dark)"><i class="ti ti-arrow-left"></i> Volver al menú</button>
-    <div id="prov-seccion-body"></div>
-  </div>
-
-  <div id="prov-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;padding:20px">
-    <div style="background:var(--white);border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:22px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div id="prov-modal-title" style="font-size:16px;font-weight:800"></div>
-        <button onclick="cerrarProvModal()" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--text2)"><i class="ti ti-x"></i></button>
-      </div>
-      <div id="prov-modal-body"></div>
-    </div>
-  </div>
-  <input type="file" id="prov-file-input" accept=".pdf,image/*" style="display:none">
-</div>
 
 <!-- CAJAS MAIN -->
 <div id="screen-main" class="screen">
@@ -1058,13 +1010,13 @@ function odcDescargarExcel(){
 // ══════════════════════════════════════════════════
 // FIREBASE INIT
 // ══════════════════════════════════════════════════
-let _db,_doc,_setDoc,_onSnapshot,_getDoc,_getDocs,_collection,_deleteDoc,_ref,_onDisconnect,_serverTimestamp,_set,_remove,_onValue;
+let _db,_doc,_setDoc,_onSnapshot,_getDoc,_getDocs,_collection,_deleteDoc,_runTransaction,_ref,_onDisconnect,_serverTimestamp,_set,_remove,_onValue;
 let _storage,_storageRef,_uploadBytes,_getDownloadURL,_deleteObject;
 
 async function initFirebase(){
   const {initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
   const {getAuth,signInAnonymously}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
-  const {getFirestore,doc,setDoc,onSnapshot,getDoc,getDocs,collection,deleteDoc}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const {getFirestore,doc,setDoc,onSnapshot,getDoc,getDocs,collection,deleteDoc,runTransaction}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
   const {getDatabase,ref,onDisconnect,serverTimestamp,set,remove,onValue}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
   const {getStorage,ref:sRef,uploadBytes,getDownloadURL,deleteObject}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
 
@@ -1091,7 +1043,7 @@ async function initFirebase(){
   }
 
   _db=getFirestore(fbApp);
-  _doc=doc;_setDoc=setDoc;_onSnapshot=onSnapshot;_getDoc=getDoc;_getDocs=getDocs;_collection=collection;_deleteDoc=deleteDoc;
+  _doc=doc;_setDoc=setDoc;_onSnapshot=onSnapshot;_getDoc=getDoc;_getDocs=getDocs;_collection=collection;_deleteDoc=deleteDoc;_runTransaction=runTransaction;
   _ref=ref;_onDisconnect=onDisconnect;_serverTimestamp=serverTimestamp;
   _set=set;_remove=remove;_onValue=onValue;
 
@@ -1357,50 +1309,204 @@ function limpiarBibliotecaVieja(){
   }
 }
 
-async function guardarBiblioteca(){
+// ══════════════════════════════════════════════════
+// GUARDADO SEGURO CON FUSIÓN DE CAMBIOS (30-sep-2026)
+// ══════════════════════════════════════════════════
+// Antes, cada guardado escribía el documento COMPLETO con lo que tenía esta
+// pantalla. Si dos personas guardaban casi al mismo tiempo, la segunda
+// borraba lo que acababa de guardar la primera (KONFIO, Diesel, biblioteca,
+// una misma caja). Ahora cada guardado:
+//   1) compara lo que tienes en pantalla contra la última versión que llegó
+//      del servidor → así sabe exactamente QUÉ cambiaste tú,
+//   2) dentro de una transacción lee la versión actual del servidor,
+//   3) le aplica SOLO tus cambios y guarda.
+// Las listas se comparan por id (o uuid), así que un registro nuevo de otra
+// persona nunca se pierde y eliminar borra el registro correcto.
+// Si no hay señal, el cambio queda pendiente y se reintenta solo.
+const _BASES={};              // "col/id" → copia de lo último recibido del servidor
+const _BASE_OBJ=new WeakMap(); // objeto en memoria → copia del servidor de la que salió
+const _PEND={};               // "col/id" → guardado pendiente por falta de señal
+const _META=['updatedAt','updatedBy'];
+let _avisoSinSenal=false,_timerPend=null;
+
+function _clon(x){return x===undefined?undefined:JSON.parse(JSON.stringify(x));}
+function _estable(x){
+  if(Array.isArray(x))return'['+x.map(_estable).join(',')+']';
+  if(x&&typeof x==='object')return'{'+Object.keys(x).sort().filter(k=>x[k]!==undefined).map(k=>JSON.stringify(k)+':'+_estable(x[k])).join(',')+'}';
+  return JSON.stringify(x===undefined?null:x);
+}
+function _igual(a,b){if(a===undefined||b===undefined)return a===b;return _estable(a)===_estable(b);}
+function _esObj(v){return v!==null&&typeof v==='object'&&!Array.isArray(v);}
+function _llaveItem(x){
+  if(_esObj(x)){
+    if(x.id!=null&&x.id!=='')return'id:'+x.id;
+    if(x.uuid!=null&&x.uuid!=='')return'uuid:'+x.uuid;
+  }
+  return'v:'+_estable(x);
+}
+function _mapaLista(arr){
+  const m=new Map(),cnt={};
+  (Array.isArray(arr)?arr:[]).forEach(x=>{
+    let k=_llaveItem(x);cnt[k]=(cnt[k]||0)+1;
+    if(cnt[k]>1)k+='#'+cnt[k];
+    m.set(k,x);
+  });
+  return m;
+}
+// Fusión de 3 vías: base = lo que había cuando empezaste, local = lo tuyo,
+// server = lo que hay ahora en la nube.
+function _fusionar(base,local,server){
+  if(_igual(local,base))return _clon(server);   // tú no cambiaste esto
+  if(_igual(server,base))return _clon(local);   // nadie más lo cambió
+  if(Array.isArray(local)&&Array.isArray(server))return _fusionarLista(base,local,server);
+  if(_esObj(local)&&_esObj(server)){
+    const b=_esObj(base)?base:{},out={};
+    new Set([...Object.keys(server),...Object.keys(local)]).forEach(k=>{
+      const enB=k in b,enL=k in local,enS=k in server;
+      if(enL&&enS)out[k]=_fusionar(b[k],local[k],server[k]);
+      else if(enL){if(!enB||!_igual(local[k],b[k]))out[k]=_clon(local[k]);}   // si no: otro lo borró
+      else if(enS){if(!enB||!_igual(server[k],b[k]))out[k]=_clon(server[k]);} // si no: tú lo borraste
+    });
+    return out;
+  }
+  return _clon(local); // mismo dato simple cambiado por los dos: gana el último que guarda
+}
+function _fusionarLista(base,local,server){
+  const B=_mapaLista(base),L=_mapaLista(local),Sv=_mapaLista(server),out=[];
+  Sv.forEach((sv,k)=>{
+    if(L.has(k))out.push(B.has(k)?_fusionar(B.get(k),L.get(k),sv):_clon(L.get(k)));
+    else if(!B.has(k))out.push(_clon(sv)); // lo agregó otra persona
+    // en B y no en L → tú lo eliminaste → no se incluye
+  });
+  L.forEach((lv,k)=>{
+    if(!Sv.has(k)&&!B.has(k))out.push(_clon(lv)); // lo agregaste tú
+    // en B y no en Sv → otra persona lo eliminó → no se revive
+  });
+  return out;
+}
+function _proyectar(o,campos){
+  const r={};
+  if(!_esObj(o))return r;
+  if(campos){campos.forEach(c=>{if(o[c]!==undefined)r[c]=o[c];});}
+  else Object.keys(o).forEach(c=>{if(!_META.includes(c)&&o[c]!==undefined)r[c]=o[c];});
+  return r;
+}
+function _registrarBase(col,id,data,obj){
+  const b=_clon(data||{});
+  _BASES[col+'/'+id]=b;
+  if(obj&&typeof obj==='object')_BASE_OBJ.set(obj,b);
+  return b;
+}
+function _esErrorPermanente(e){
+  return['permission-denied','invalid-argument','unauthenticated','not-found'].includes(e?.code);
+}
+function _programarReintento(){
+  if(_timerPend)return;
+  _timerPend=setTimeout(()=>{_timerPend=null;_reintentarPendientes();},10000);
+}
+function _reintentarPendientes(){
+  Object.keys(_PEND).forEach(k=>{
+    const p=_PEND[k];
+    if(p&&!p.enCurso)guardarFusionado(p.col,p.id,p.local,p.opts,true);
+  });
+}
+window.addEventListener('online',_reintentarPendientes);
+
+// col/id = documento de Firestore. local = los campos que maneja esta pantalla.
+// opts.campos = lista de campos que se fusionan (los demás del documento se respetan).
+// opts.baseObj = objeto en memoria del que salió "local" (para usar SU base).
+// opts.permitirSinBase = true si el documento puede ser nuevo (ej. caja nueva).
+async function guardarFusionado(col,id,localIn,opts={},esReintento=false){
+  const k=col+'/'+id;
+  const campos=opts.campos||null;
+  const localNuevo=_proyectar(_clon(localIn),campos);
+  // La base se toma AHORA (antes de cualquier espera) para que corresponda
+  // exactamente a lo que la persona tenía en pantalla.
+  const pend=_PEND[k];
+  let base,local=localNuevo;
+  if(pend&&esReintento){
+    base=pend.base;local=pend.local;
+  }else{
+    const bo=opts.baseObj&&_BASE_OBJ.get(opts.baseObj);
+    base=bo!==undefined?bo:_BASES[k];
+    if(base===undefined){
+      if(!opts.permitirSinBase&&!pend){
+        toast('⏳ Todavía se están cargando los datos del servidor. No se guardó — espera unos segundos y vuelve a intentarlo.',true);
+        return false;
+      }
+      base=pend?pend.base:{};
+    }
+    base=_proyectar(_clon(base),campos);
+    if(pend){
+      // Había cambios sin guardar (sin señal): primero se aplican esos sobre
+      // la base actual y encima los cambios nuevos, para no perder ninguno.
+      const conPendientes=_fusionar(pend.base,pend.local,base);
+      local=_fusionar(base,localNuevo,conPendientes);
+    }else if(_igual(base,local)){
+      return true; // no cambiaste nada: no hay que escribir
+    }
+  }
+
+  const registro={col,id,local,opts,base,enCurso:true};
+  _PEND[k]=registro;
   try{
-    await _setDoc(_doc(_db,getBase(),'biblioteca'),{items:S.biblioteca||[],updatedAt:Date.now()});
+    if(!_db||!_runTransaction){const e=new Error('Firebase todavía no conecta');e.code='unavailable';throw e;}
+    const ref=_doc(_db,col,id);
+    await _runTransaction(_db,async tx=>{
+      const snap=await tx.get(ref);
+      const srv=snap.exists()?snap.data():{};
+      const fus=_fusionar(base,local,_proyectar(srv,campos));
+      const salida=campos?Object.assign({},srv,fus):fus;
+      Object.assign(salida,opts.extra||{});
+      if(opts.etiqueta)checkSizeWarn(salida,opts.etiqueta);
+      tx.set(ref,salida);
+    });
+    if(_PEND[k]===registro)delete _PEND[k];
+    if(!Object.keys(_PEND).length&&_avisoSinSenal){
+      _avisoSinSenal=false;toast('✅ Conexión recuperada — los cambios pendientes ya se guardaron');
+    }
+    return true;
   }catch(e){
-    console.error('[GT] Error guardando biblioteca:',e);
+    console.error('[GT] Error guardando '+k+':',e);
+    if(_esErrorPermanente(e)){
+      if(_PEND[k]===registro)delete _PEND[k];
+      toast('⚠️ El servidor rechazó el guardado ('+(e.code||e.message)+'). Tus últimos cambios NO se guardaron.',true);
+      return false;
+    }
+    registro.enCurso=false;
+    if(!_avisoSinSenal){
+      _avisoSinSenal=true;
+      toast('📶 Sin conexión con el servidor. Tus cambios se guardarán solos cuando vuelva la señal — NO cierres ni recargues la app.',true);
+    }
+    _programarReintento();
+    return false;
   }
 }
+// Si alguien intenta cerrar/recargar con cambios pendientes, el navegador avisa.
+window.addEventListener('beforeunload',e=>{
+  if(Object.keys(_PEND).length){e.preventDefault();e.returnValue='';}
+});
 
+async function guardarBiblioteca(){
+  return guardarFusionado(getBase(),'biblioteca',{items:S.biblioteca||[]},
+    {campos:['items'],extra:{updatedAt:Date.now()},etiqueta:'biblioteca',baseObj:S.biblioteca});
+}
+
+// Guarda katálogo, usuarios y KONFIO ({base}/config) y la biblioteca.
+// Diesel YA NO se guarda aquí: su única fuente es gasolina/datos. Los campos
+// dieselXXX que ya existen en config se dejan intactos como respaldo viejo.
 async function fbSave(){
   setSyncState('syncing');
-  try{
-    const base=getBase();
-
-    const configPayload={
-      katalogo:S.katalogo,
-      users:S.users,
-      konfioData:S.konfioData,
-      updatedAt:Date.now(),
-      updatedBy:S.user?.name||'sistema'
-    };
-    if(base==='app'&&window._G?.D){
-      configPayload.dieselCompras=window._G.D.compras||[];
-      configPayload.dieselCargas=window._G.D.cargas||[];
-      configPayload.dieselDistribuciones=window._G.D.distribuciones||[];
-      configPayload.dieselProyectos=window._G.D.proyectos||[];
-      configPayload.dieselEquipos=window._G.D.equipos||[];
-      configPayload.dieselPersonas=window._G.D.personas||[];
-      configPayload.dieselConductoresPipaIds=window._G.D.conductoresPipaIds||[];
-    }
-    const bibliotecaPayload={items:S.biblioteca||[],updatedAt:Date.now()};
-
-    checkSizeWarn(configPayload,'config');
-    checkSizeWarn(bibliotecaPayload,'biblioteca');
-
-    await Promise.all([
-      _setDoc(_doc(_db,base,'config'),configPayload),
-      _setDoc(_doc(_db,base,'biblioteca'),bibliotecaPayload)
-    ]);
-    setSyncState('ok');
-  }catch(e){
-    console.error('[GT] Error guardando:',e);
-    setSyncState('error');
-    toast('⚠️ No se pudo guardar en el servidor. Revisa tu conexión y vuelve a intentar — tus cambios locales podrían perderse si recargas.',true);
-  }
+  const base=getBase();
+  const r=await Promise.all([
+    guardarFusionado(base,'config',
+      {katalogo:S.katalogo,users:S.users,konfioData:S.konfioData},
+      {campos:['katalogo','users','konfioData'],
+       extra:{updatedAt:Date.now(),updatedBy:S.user?.name||'sistema'},etiqueta:'config'}),
+    guardarBiblioteca()
+  ]);
+  setSyncState(r.every(Boolean)?'ok':'error');
+  return r.every(Boolean);
 }
 
 // ══════════════════════════════════════════════════
@@ -1415,14 +1521,11 @@ async function fbSave(){
 // puede pisar el trabajo de nadie más en otra caja.
 async function guardarCaja(c){
   setSyncState('syncing');
-  try{
-    await _setDoc(_doc(_db,getBase()+'_cajas',c.id),c);
-    setSyncState('ok');
-  }catch(e){
-    console.error('[GT] Error guardando caja:',e);
-    setSyncState('error');
-    toast('⚠️ No se pudo guardar esta caja en el servidor. Revisa tu conexión y vuelve a intentar.',true);
-  }
+  // Solo se aplican TUS cambios sobre la versión actual de la caja: si otra
+  // persona agregó un gasto a la misma caja al mismo tiempo, no se pierde.
+  const ok=await guardarFusionado(getBase()+'_cajas',c.id,c,{baseObj:c,permitirSinBase:true,etiqueta:'caja '+(c.name||'')});
+  setSyncState(ok?'ok':'error');
+  return ok;
 }
 
 async function eliminarCajaDoc(id){
@@ -1453,31 +1556,20 @@ function fbListen(){
 
   // ---- config (katalogo, users, konfio, diesel) ----
   S.unsub=_onSnapshot(_doc(_db,base,'config'),(snap)=>{
+    _registrarBase(base,'config',snap.exists()?snap.data():{});
     if(!snap.exists())return;
     const d=snap.data();
     S.katalogo=d.katalogo||getDefaultKatalogo();
     S.konfioData=d.konfioData||{};
     S.users=d.users||S.users;
-    if(d.dieselCompras){
-      S.dieselData={
-        compras:d.dieselCompras||[],
-        cargas:d.dieselCargas||[],
-        distribuciones:d.dieselDistribuciones||[],
-        proyectos:d.dieselProyectos||[],
-        equipos:d.dieselEquipos||[],
-        personas:d.dieselPersonas||[],
+    // Diesel ya no se lee de aquí (su fuente única es gasolina/datos). Solo se
+    // guarda el respaldo viejo para migrar "conductores de pipa" si hace falta.
+    if(d.dieselCompras||d.dieselConductoresPipaIds){
+      S.dieselCfgRespaldo={
+        compras:d.dieselCompras||[],cargas:d.dieselCargas||[],distribuciones:d.dieselDistribuciones||[],
+        proyectos:d.dieselProyectos||[],equipos:d.dieselEquipos||[],personas:d.dieselPersonas||[],
         conductoresPipaIds:d.dieselConductoresPipaIds||[]
       };
-      if(window._G?.D){
-        const G=window._G;
-        G.D.compras=d.dieselCompras||[];
-        G.D.cargas=d.dieselCargas||[];
-        G.D.distribuciones=d.dieselDistribuciones||[];
-        if(d.dieselProyectos?.length)G.D.proyectos=d.dieselProyectos;
-        if(d.dieselEquipos?.length)G.D.equipos=d.dieselEquipos;
-        if(d.dieselPersonas?.length)G.D.personas=d.dieselPersonas;
-        if(typeof G.render==='function')G.render();
-      }
     }
     setSyncState('ok');
     if(d.updatedBy&&d.updatedBy!==S.user?.name){
@@ -1496,8 +1588,10 @@ function fbListen(){
   // ahora es su propio documento — guardar una nunca afecta a las demás.
   S.unsubCajas=_onSnapshot(_collection(_db,base+'_cajas'),(snap)=>{
     const cajas=[];
-    snap.forEach(d=>cajas.push(d.data()));
+    Object.keys(_BASES).forEach(k=>{if(k.startsWith(base+'_cajas/'))delete _BASES[k];});
+    snap.forEach(d=>{const data=d.data();cajas.push(data);_registrarBase(base+'_cajas',d.id,data,data);});
     S.cajas=cajas;
+    _reintentarPendientes();
     refreshCurrentView();
   },(err)=>{
     console.error('[GT] Error listener cajas:',err);
@@ -1507,6 +1601,7 @@ function fbListen(){
   // ---- biblioteca de XMLs ----
   S.unsubBiblioteca=_onSnapshot(_doc(_db,base,'biblioteca'),(snap)=>{
     S.biblioteca=snap.exists()?(snap.data().items||[]):[];
+    _registrarBase(base,'biblioteca',snap.exists()?snap.data():{},S.biblioteca);
     limpiarBibliotecaVieja();
   },(err)=>{
     console.error('[GT] Error listener biblioteca:',err);
@@ -2367,7 +2462,7 @@ function renderCajaContent(){
   if(c.tipo==='cf'){
     tbody=c.gastos.length?c.gastos.map((g,i)=>{
       const vieja=isAdmin()&&g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14;
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'cf')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Esta factura se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
       return `<tr class="${vieja?'row-alert':''}">
@@ -2382,7 +2477,7 @@ function renderCajaContent(){
     }).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px">Sin gastos</td></tr>';
   }else{
     tbody=c.gastos.length?c.gastos.map((g,i)=>{
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'sf')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Este gasto se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
       return `<tr>
@@ -2502,7 +2597,7 @@ window.filtrarTablaCaja=function(){
     tbody.innerHTML=filas.length?filas.map((g)=>{
       const oi=c.gastos.indexOf(g);
       const vieja=isAdmin()&&g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14;
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'cf')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Esta factura se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
       return `<tr class="${vieja?'row-alert':''}">
@@ -2518,7 +2613,7 @@ window.filtrarTablaCaja=function(){
   }else{
     tbody.innerHTML=filas.length?filas.map((g)=>{
       const oi=c.gastos.indexOf(g);
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'sf')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Este gasto se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
       return `<tr>
@@ -2538,12 +2633,18 @@ window.filtrarTablaCaja=function(){
 };
 
 // ── ELIMINAR GASTO ────────────────────────────────
-window.eliminarGasto=async function(idx,tipo){
+window.eliminarGasto=async function(idx,tipo,gastoId){
   if(!confirm('¿Eliminar este gasto?'))return;
+  // Se busca la caja y el gasto DESPUÉS de confirmar, y por su id: si mientras
+  // tanto otra persona agregó o quitó gastos, se borra el correcto.
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
-  const g=c.gastos[idx];
+  if(!c){toast('Esta caja ya no está disponible, recarga la página',true);return;}
+  const pos=gastoId?c.gastos.findIndex(x=>x.id===gastoId):idx;
+  const g=pos>=0?c.gastos[pos]:null;
+  if(!g){toast('Ese gasto ya no existe (otra persona lo pudo haber eliminado). Se actualizó la lista.',true);renderCajaContent();return;}
+  if(!c.historial)c.historial=[];
   c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:`Gasto eliminado: ${g.descripcion||g.proveedor||'s/n'}`});
-  c.gastos.splice(idx,1);
+  c.gastos.splice(pos,1);
   await guardarCaja(c);toast('Gasto eliminado');renderCajaContent();
 };
 
@@ -4060,291 +4161,6 @@ window.migrarCajasADocumentosIndividuales=async function(){
   }
 };
 
-// ══════════════════════════════════════════════════
-// CONTROL PROVEEDORES — módulo sin PIN, abierto a todos
-// ══════════════════════════════════════════════════
-// A diferencia del resto de la app, este módulo no pide PIN — solo el
-// nombre de quien entra, para que quede registrado en el historial de
-// cambios de cada proveedor. Los documentos se guardan en GitHub (mismo
-// mecanismo que ya usan los comprobantes de pago y GT-RH).
-const DOCS_PROV=['CSF','INE Representante Legal','Comprobante de domicilio','Opinión de cumplimiento IMSS','Opinión de cumplimiento INFONAVIT','Opinión de cumplimiento SAT','Acta constitutiva'];
-let proveedores=[];
-let pendingUploadProv=null;
-let provSeccionActual=null;
-
-function tieneDocProv(info){return !!(info&&info.ghPath);}
-
-window.entrarProveedores=function(){
-  document.getElementById('prov-user-chip').textContent=S.empresa==='cgt'?'Comercial GT':'Grupo Trego';
-  showScreen('screen-proveedores');
-  volverProvMenu();
-  fbListenProveedores();
-};
-
-window.salirProveedores=function(){
-  if(S.unsubProveedores){S.unsubProveedores();S.unsubProveedores=null;}
-  proveedores=[];provSeccionActual=null;
-  const pantalla=S.empresa==='cgt'?'screen-welcome-cgt':'screen-welcome';
-  showScreen(pantalla);
-};
-
-function fbListenProveedores(){
-  if(!_db||!_collection||!_onSnapshot){setTimeout(fbListenProveedores,400);return;}
-  if(S.unsubProveedores)S.unsubProveedores();
-  const base=getBase();
-  const lbl=document.getElementById('prov-sync-label');
-  S.unsubProveedores=_onSnapshot(_collection(_db,base+'_proveedores'),(snap)=>{
-    proveedores=[];
-    snap.forEach(d=>proveedores.push(d.data()));
-    if(lbl)lbl.textContent='☁️ Sincronizado';
-    renderProvSeccionActual();
-  },(err)=>{
-    console.error('[Prov] Error listener:',err);
-    if(lbl)lbl.textContent='⚠️ Sin conexión';
-  });
-}
-
-window.mostrarSeccionProv=function(nombre){
-  provSeccionActual=nombre;
-  document.getElementById('prov-menu').style.display='none';
-  document.getElementById('prov-seccion').style.display='block';
-  renderProvSeccionActual();
-};
-
-window.volverProvMenu=function(){
-  provSeccionActual=null;
-  document.getElementById('prov-menu').style.display='block';
-  document.getElementById('prov-seccion').style.display='none';
-};
-
-function renderProvSeccionActual(){
-  if(!provSeccionActual)return;
-  if(provSeccionActual==='dashboard')renderProvDashboard();
-  else if(provSeccionActual==='lista')renderProvLista();
-  else if(provSeccionActual==='expedientes')renderProvExpedientes();
-  else if(provSeccionActual==='incompletos')renderProvIncompletos();
-  else if(provSeccionActual==='nuevo')renderProvNuevo();
-}
-
-async function guardarProveedor(p){
-  try{ await _setDoc(_doc(_db,getBase()+'_proveedores',p.id),p); }
-  catch(e){ console.error('[Prov] Error guardando:',e); toast('No se pudo guardar el proveedor',true); }
-}
-
-function renderProvDashboard(){
-  const el=document.getElementById('prov-seccion-body');
-  const total=proveedores.length;
-  const completos=proveedores.filter(p=>DOCS_PROV.every(d=>tieneDocProv(p.exp?.[d]))).length;
-  const incompletos=total-completos;
-  el.innerHTML=`<div class="menu-title">Dashboard</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
-      <div class="card" style="text-align:center"><div style="font-size:26px;font-weight:800">${total}</div><div style="font-size:12px;color:var(--text2)">Proveedores</div></div>
-      <div class="card" style="text-align:center"><div style="font-size:26px;font-weight:800;color:#1b5e20">${completos}</div><div style="font-size:12px;color:var(--text2)">Expediente completo</div></div>
-      <div class="card" style="text-align:center"><div style="font-size:26px;font-weight:800;color:#c0392b">${incompletos}</div><div style="font-size:12px;color:var(--text2)">Incompletos</div></div>
-    </div>`;
-}
-
-function renderProvLista(){
-  const el=document.getElementById('prov-seccion-body');
-  const lista=proveedores.slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
-  el.innerHTML=`<div class="menu-title">Proveedores</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-    ${lista.length?lista.map(p=>{
-      const tot=DOCS_PROV.filter(d=>tieneDocProv(p.exp?.[d])).length;
-      return `<div class="card" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="abrirDocsProv('${p.id}')">
-        <div><b>${p.nombre}</b><div style="font-size:11px;color:var(--text2)">${tot}/${DOCS_PROV.length} documentos</div></div>
-        <i class="ti ti-chevron-right"></i>
-      </div>`;
-    }).join(''):'<div style="text-align:center;padding:30px;color:var(--text2)">Sin proveedores todavía.</div>'}
-    </div>`;
-}
-
-function renderProvExpedientes(){
-  const el=document.getElementById('prov-seccion-body');
-  const lista=proveedores.slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
-  el.innerHTML=`<div class="menu-title">Expedientes de Proveedores</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:#1a1a1a;color:#fff"><th style="padding:8px;text-align:left">Proveedor</th>${DOCS_PROV.map(d=>`<th style="padding:8px">${d}</th>`).join('')}<th style="padding:8px">Tel</th><th style="padding:8px">Correo</th></tr></thead>
-      <tbody>${lista.map(p=>{
-        const ex=p.exp||{};
-        return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px;cursor:pointer;color:#9A3B33;font-weight:700" onclick="abrirDocsProv('${p.id}')">${p.nombre}</td>
-        ${DOCS_PROV.map(d=>`<td style="text-align:center;padding:8px">${tieneDocProv(ex[d])?'✅':'➖'}</td>`).join('')}
-        <td style="text-align:center;padding:8px">${(p.tel||'').trim()?'✅':'➖'}</td>
-        <td style="text-align:center;padding:8px">${(p.mail||'').trim()?'✅':'➖'}</td></tr>`;
-      }).join('')}</tbody>
-    </table></div>`;
-}
-
-function renderProvIncompletos(){
-  const el=document.getElementById('prov-seccion-body');
-  const lista=proveedores.filter(p=>DOCS_PROV.some(d=>!tieneDocProv(p.exp?.[d])));
-  el.innerHTML=`<div class="menu-title">Incompletos</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-    ${lista.length?lista.map(p=>{
-      const faltan=DOCS_PROV.filter(d=>!tieneDocProv(p.exp?.[d]));
-      return `<div class="card" style="cursor:pointer" onclick="abrirDocsProv('${p.id}')">
-        <b>${p.nombre}</b>
-        <div style="font-size:11px;color:#c0392b;margin-top:4px">Faltan: ${faltan.join(', ')}</div>
-      </div>`;
-    }).join(''):'<div style="text-align:center;padding:30px;color:var(--text2)">✅ Todos los proveedores tienen su expediente completo.</div>'}
-    </div>`;
-}
-
-function renderProvNuevo(){
-  const el=document.getElementById('prov-seccion-body');
-  el.innerHTML=`<div class="menu-title">Nuevo Proveedor</div>
-    <div class="card">
-      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">NOMBRE DEL PROVEEDOR</div>
-      <input type="text" id="prov-nuevo-nombre" placeholder="Ej. ACABADOS Y MANTENIMIENTOS MTY S.A. DE C.V." style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;box-sizing:border-box" onkeydown="if(event.key==='Enter')crearProveedor()">
-      <button class="btn-gold" style="margin-top:12px;padding:10px 20px" onclick="crearProveedor()"><i class="ti ti-plus"></i> Guardar Proveedor</button>
-    </div>`;
-}
-
-window.crearProveedor=async function(){
-  const nombre=document.getElementById('prov-nuevo-nombre').value.trim().toUpperCase();
-  if(!nombre){toast('Escribe el nombre del proveedor',true);return;}
-  const p={id:genId(),nombre,tel:'',mail:'',exp:{},createdAt:new Date().toISOString(),
-    historial:[{ts:new Date().toISOString(),user:'Equipo',accion:'Proveedor creado'}]};
-  proveedores.push(p);
-  await guardarProveedor(p);
-  toast('Proveedor guardado ✓');
-  mostrarSeccionProv('lista');
-};
-
-window.actualizarContactoProv=async function(id){
-  const p=proveedores.find(x=>x.id===id);if(!p)return;
-  p.tel=document.getElementById('prov-tel').value.trim();
-  p.mail=document.getElementById('prov-mail').value.trim();
-  await guardarProveedor(p);
-};
-
-window.abrirDocsProv=function(id){
-  const p=proveedores.find(x=>x.id===id);if(!p)return;
-  if(!p.exp)p.exp={};
-  const totalOk=DOCS_PROV.filter(d=>tieneDocProv(p.exp[d])).length;
-  document.getElementById('prov-modal-title').textContent='📂 '+p.nombre;
-  document.getElementById('prov-modal-body').innerHTML=`
-    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">📞 Datos de contacto</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label style="font-size:11px;color:var(--text2)">Teléfono</label><input id="prov-tel" value="${p.tel||''}" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:8px;box-sizing:border-box" onchange="actualizarContactoProv('${id}')"></div>
-        <div><label style="font-size:11px;color:var(--text2)">Correo</label><input type="email" id="prov-mail" value="${p.mail||''}" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:8px;box-sizing:border-box" onchange="actualizarContactoProv('${id}')"></div>
-      </div>
-    </div>
-    <div style="font-weight:700;margin-bottom:10px;font-size:13px">📄 Documentos (${totalOk}/${DOCS_PROV.length})</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:18px">
-      ${DOCS_PROV.map(doc=>{
-        const info=p.exp[doc];
-        const tiene=tieneDocProv(info);
-        const safe=doc.replace(/'/g,"\\'");
-        return `<div style="border:1.5px solid ${tiene?'#4F6B54':'var(--border)'};background:${tiene?'#EAF3EB':'var(--white)'};border-radius:10px;padding:10px;font-size:12px">
-          <div style="font-weight:700;margin-bottom:6px">${tiene?'✅':'⬜'} ${doc}</div>
-          ${tiene?`<div style="font-size:11px;color:var(--text2);margin-bottom:6px;word-break:break-all">${info.name||''}${info.sizeKB?' · '+info.sizeKB+' KB':''}</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn-sm" onclick="verDocumentoProv('${id}','${safe}')">Ver</button>
-              <button class="btn-sm" style="color:#c0392b;border-color:#c0392b" onclick="quitarDocProv('${id}','${safe}')">Quitar</button>
-            </div>`:
-            `<button class="btn-gold btn-sm" style="width:100%" onclick="subirDocProv('${id}','${safe}')">📤 Subir archivo</button>`}
-        </div>`;
-      }).join('')}
-    </div>
-    <button class="btn-gold" style="width:100%" onclick="descargarZipProv('${id}')"><i class="ti ti-package"></i> Descargar ZIP de documentos</button>`;
-  document.getElementById('prov-modal').style.display='flex';
-};
-
-window.cerrarProvModal=function(){document.getElementById('prov-modal').style.display='none';};
-
-window.subirDocProv=function(empId,docTipo){
-  pendingUploadProv={empId,doc:docTipo};
-  document.getElementById('prov-file-input').click();
-};
-
-document.getElementById('prov-file-input').addEventListener('change',async function(ev){
-  const f=ev.target.files[0];
-  if(!f||!pendingUploadProv){return;}
-  if(f.size>25*1024*1024){toast('El archivo pesa más de 25 MB',true);ev.target.value='';return;}
-  const{empId,doc:docTipo}=pendingUploadProv;
-  toast('Subiendo '+docTipo+'...');
-  try{
-    const path=`proveedores/${getBase()}/${empId}_${docTipo.replace(/[^a-zA-Z0-9]/g,'_')}_${Date.now()}_${f.name}`;
-    const {sha}=await subirArchivoGithub(f,path);
-    const p=proveedores.find(x=>x.id===empId);
-    if(!p){toast('Proveedor no encontrado',true);ev.target.value='';pendingUploadProv=null;return;}
-    if(!p.exp)p.exp={};
-    const prev=p.exp[docTipo];
-    if(prev?.ghPath&&prev?.sha)eliminarArchivoGithub(prev.ghPath,prev.sha);
-    p.exp[docTipo]={name:f.name,type:f.type,uploadedAt:Date.now(),sizeKB:Math.round(f.size/1024),ghPath:path,sha};
-    p.historial=p.historial||[];
-    p.historial.push({ts:new Date().toISOString(),user:'Equipo',accion:docTipo+' subido'});
-    await guardarProveedor(p);
-    toast('✅ '+docTipo+' subido');
-    abrirDocsProv(empId);
-  }catch(e){
-    console.error('[Prov] Error subiendo archivo:',e);
-    toast('⚠️ No se pudo subir: '+e.message,true);
-  }
-  pendingUploadProv=null;
-  ev.target.value='';
-});
-
-window.verDocumentoProv=async function(empId,docTipo){
-  const p=proveedores.find(x=>x.id===empId);
-  const info=p?.exp?.[docTipo];
-  if(!info?.ghPath){toast('No se encontró el archivo',true);return;}
-  toast('Abriendo...');
-  try{
-    const blob=await ghFetchRawBlob(info.ghPath);
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=docTipo+' - '+(info.name||'archivo');
-    document.body.appendChild(a);a.click();a.remove();
-    URL.revokeObjectURL(url);
-  }catch(e){
-    console.error('[Prov] Error abriendo:',e);
-    toast('No se pudo abrir el archivo',true);
-  }
-};
-
-window.quitarDocProv=async function(empId,docTipo){
-  if(!confirm('¿Eliminar este documento?'))return;
-  const p=proveedores.find(x=>x.id===empId);if(!p)return;
-  const info=p.exp[docTipo];
-  if(info?.ghPath&&info?.sha)eliminarArchivoGithub(info.ghPath,info.sha);
-  delete p.exp[docTipo];
-  p.historial=p.historial||[];
-  p.historial.push({ts:new Date().toISOString(),user:'Equipo',accion:docTipo+' eliminado'});
-  await guardarProveedor(p);
-  toast('Documento eliminado');
-  abrirDocsProv(empId);
-};
-
-window.descargarZipProv=async function(id){
-  const p=proveedores.find(x=>x.id===id);if(!p)return;
-  const docs=Object.entries(p.exp||{}).filter(([k,v])=>v&&v.ghPath);
-  if(!docs.length){toast('No hay documentos para descargar',true);return;}
-  if(typeof JSZip==='undefined'){toast('No se pudo cargar el generador de ZIP',true);return;}
-  toast('📦 Preparando ZIP...');
-  const zip=new JSZip();
-  try{
-    await Promise.all(docs.map(async([doc,info])=>{
-      try{
-        const blob=await ghFetchRawBlob(info.ghPath);
-        const ext=(info.name||'').match(/\.[^.]+$/)?.[0]||'';
-        zip.file(doc.replace(/[\\/:*?"<>|]/g,'')+ext,blob);
-      }catch(e){console.error('[Prov] Error en ZIP:',doc,e);}
-    }));
-    const blob=await zip.generateAsync({type:'blob'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;
-    a.download=(p.nombre||'proveedor').replace(/\s+/g,'_')+'_documentos.zip';
-    document.body.appendChild(a);a.click();a.remove();
-    URL.revokeObjectURL(url);
-    toast('📦 ZIP descargado');
-  }catch(e){
-    console.error('[Prov] Error generando ZIP:',e);
-    toast('Error al generar el ZIP',true);
-  }
-};
-
 window.agregarCatalogo=async function(){
   const val=document.getElementById('cat-input').value.trim().toUpperCase();
   const tipo=document.getElementById('cat-tipo').value;
@@ -4441,7 +4257,7 @@ function renderKonfio(){
   }
 
   const tbody=data.gastos.length?data.gastos.map((g,i)=>{
-    const delBtn=canEditKonfio()?`<button onclick="eliminarGastoKonfio(${i})" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+    const delBtn=canEditKonfio()?`<button onclick="eliminarGastoKonfio(${i},'${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
     return`<tr>
       <td>${fmtDate(g.fechaFactura)}</td><td>${escapeHtml(g.proyecto||'')}</td><td>${escapeHtml(g.proveedor||'')}</td>
       <td>${escapeHtml(g.concepto||'')}</td><td>${escapeHtml(g.noFactura||'')}</td>
@@ -4505,7 +4321,7 @@ window.filtrarTablaKonfio=function(){
   if(cnt)cnt.textContent=q?`${filtrados.length} de ${data.gastos.length}`:'';
   tbody.innerHTML=filtrados.length?filtrados.map((g,i)=>{
     const oi=data.gastos.indexOf(g);
-    const delBtn=canEditKonfio()?`<button onclick="eliminarGastoKonfio(${oi})" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+    const delBtn=canEditKonfio()?`<button onclick="eliminarGastoKonfio(${oi},'${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
     return`<tr>
       <td>${fmtDate(g.fechaFactura)}</td><td>${escapeHtml(g.proyecto||'')}</td><td>${escapeHtml(g.proveedor||'')}</td>
       <td>${escapeHtml(g.concepto||'')}</td><td>${escapeHtml(g.noFactura||'')}</td>
@@ -4524,10 +4340,13 @@ window.togglePagoKonfio=async function(){
   await fbSave();toast('Estatus actualizado');renderKonfio();
 };
 
-window.eliminarGastoKonfio=async function(idx){
+window.eliminarGastoKonfio=async function(idx,gastoId){
   if(!confirm('¿Eliminar este gasto?'))return;
   const key=`${kState.anio}-${String(kState.mes).padStart(2,'0')}`;
-  S.konfioData[key].gastos.splice(idx,1);
+  const lista=S.konfioData[key]?.gastos||[];
+  const pos=gastoId?lista.findIndex(x=>x.id===gastoId):idx;
+  if(pos<0||!lista[pos]){toast('Ese gasto ya no existe (otra persona lo pudo haber eliminado). Se actualizó la lista.',true);renderKonfio();return;}
+  lista.splice(pos,1);
   await fbSave();toast('Gasto eliminado');renderKonfio();
 };
 
@@ -4696,6 +4515,7 @@ function initGasolina(){
   // Si ya está inicializado y tiene datos, solo re-renderizar
   if(G._initialized){
     gRenderFromG(G);
+    if(!G._gUnsub&&typeof G._gIniciarListener==='function')G._gIniciarListener();
     return;
   }
   G._initialized=true;
@@ -4741,27 +4561,24 @@ function initGasolina(){
     re_coid:'',e_cod:'',e_desc:'',e_tipo:'',p_num:'',p_nom:'',pe_nom:''
   };
 
-  // Cargar desde localStorage (trego_diesel_v3) o usar datos migrados como fallback
-  // PRIORIDAD: S.dieselData (de Firebase via fbListen) > localStorage > MIGRATED_DATA
+  // Carga inicial SOLO para mostrar mientras llega el servidor: la última copia
+  // guardada en este dispositivo, o el catálogo base si no hay nada.
+  // Estos datos NUNCA se suben tal cual: al guardar solo se aplican los cambios
+  // que la persona haga sobre lo que ve (ver guardarFusionado). La fuente única
+  // de Diesel es el documento gasolina/datos.
+  G._listo=false;
   try{
-    if(S.dieselData?.compras?.length||S.dieselData?.cargas?.length){
-      // Datos frescos de Firebase ya cargados por fbListen — usar estos
-      G.D=JSON.parse(JSON.stringify(S.dieselData));
-    }else{
-      const raw=localStorage.getItem('trego_diesel_v3')||localStorage.getItem('trego_v3');
-      const s=raw?JSON.parse(raw):null;
-      if(s?.D&&(s.D.compras?.length||s.D.cargas?.length)){
-        G.D=s.D;
-      }else{
-        G.D=JSON.parse(JSON.stringify(MIGRATED_DATA));
-        localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));
-      }
-      if(s?.F)G.F=Object.assign(G.F,s.F);
-    }
+    const raw=localStorage.getItem('trego_diesel_v3');
+    const s=raw?JSON.parse(raw):null;
+    G.D=(s?.D&&Array.isArray(s.D.compras))?s.D:seedData();
+    if(s?.F)G.F=Object.assign(G.F,s.F);
   }catch(e){
-    G.D=JSON.parse(JSON.stringify(MIGRATED_DATA));
+    G.D=seedData();
   }
+  ['compras','cargas','distribuciones','proyectos','equipos','personas'].forEach(k=>{if(!Array.isArray(G.D[k]))G.D[k]=[];});
   if(!G.D.conductoresPipaIds)G.D.conductoresPipaIds=[];
+  // Base de comparación hasta que llegue el servidor = lo que se está mostrando.
+  _registrarBase('gasolina','datos',gCamposDiesel());
 
   // Asegurar fechas y selecciones por defecto
   ['co_fecha','ca_fecha','di_fecha'].forEach(k=>{if(!G.F[k])G.F[k]=ghoy();});
@@ -4773,6 +4590,7 @@ function initGasolina(){
   // El listener gIniciarListener maneja la carga inicial y los cambios en tiempo real
   // Pequeño delay para que el módulo se muestre antes de que llegue Firebase
   gRender();
+  gSetSync('cargando');
   setTimeout(gIniciarListener, 300);
 
   function ghoy(){return new Date().toISOString().split('T')[0];}
@@ -4786,30 +4604,26 @@ function initGasolina(){
     if(!dot||!lbl)return;
     if(state==='ok'){dot.style.background='#4caf50';lbl.textContent='En línea';}
     else if(state==='saving'){dot.style.background='#ff9800';lbl.textContent='Guardando…';}
+    else if(state==='cargando'){dot.style.background='#ff9800';lbl.textContent='Cargando datos…';}
     else{dot.style.background='#f44336';lbl.textContent='Sin conexión';}
   }
 
+  function gCamposDiesel(){
+    return{compras:G.D.compras,cargas:G.D.cargas,distribuciones:G.D.distribuciones,
+      proyectos:G.D.proyectos,equipos:G.D.equipos,personas:G.D.personas,
+      conductoresPipaIds:G.D.conductoresPipaIds||[]};
+  }
   async function gGuardar(){
     gSetSync('saving');
     try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
-    if(!_db||!_doc||!_setDoc){gSetSync('error');return;}
-    try{
-      // Guardar en documento propio de Diesel (gasolina/datos)
-      await _setDoc(_doc(_db,'gasolina','datos'),{
-        compras:G.D.compras,
-        cargas:G.D.cargas,
-        distribuciones:G.D.distribuciones,
-        proyectos:G.D.proyectos,
-        equipos:G.D.equipos,
-        personas:G.D.personas,
-        updatedAt:Date.now(),
-        updatedBy:S.user?.name||'sistema'
-      });
-      // También guardar en el documento de config (fbSave ya reparte los datos
-      // de Diesel dentro de {base}/config junto con katálogo/usuarios)
-      await fbSave();
-      gSetSync('ok');
-    }catch(e){console.warn('[GT Diesel] Error guardando:',e);gSetSync('error');}
+    // Una sola fuente: gasolina/datos. Solo se aplican TUS cambios sobre lo que
+    // hay en el servidor, así dos personas capturando a la vez no se pisan.
+    const ok=await guardarFusionado('gasolina','datos',gCamposDiesel(),{
+      campos:['compras','cargas','distribuciones','proyectos','equipos','personas','conductoresPipaIds'],
+      extra:{updatedAt:Date.now(),updatedBy:S.user?.name||'sistema'},
+      permitirSinBase:true,etiqueta:'Diesel'
+    });
+    gSetSync(ok?(G._listo?'ok':'cargando'):'error');
   }
 
   let _gRefreshTimer=null;
@@ -4825,11 +4639,18 @@ function initGasolina(){
   }
 
   function gIniciarListener(){
-    if(_gUnsub)_gUnsub();
+    if(G._gUnsub)G._gUnsub();
     if(!_db||!_doc||!_onSnapshot){setTimeout(gIniciarListener,500);return;}
-    _gUnsub=_onSnapshot(_doc(_db,'gasolina','datos'),snap=>{
-      if(!snap.exists())return;
+    G._gUnsub=_onSnapshot(_doc(_db,'gasolina','datos'),snap=>{
+      _registrarBase('gasolina','datos',snap.exists()?snap.data():{});
+      if(!snap.exists()){
+        // No existe todavía el documento de Diesel: se toma el respaldo viejo
+        // de config (si hay) para mostrarlo; se sube completo en el siguiente guardado.
+        if(!G._listo&&S.dieselCfgRespaldo){G.D=JSON.parse(JSON.stringify(S.dieselCfgRespaldo));gRenderSafe();}
+        G._listo=true;gSetSync('ok');return;
+      }
       const data=snap.data();
+      G._listo=true;
       // Siempre actualizar con los datos de Firebase
       if(data.compras){
         const tabActual=G.F.tab;
@@ -4839,6 +4660,9 @@ function initGasolina(){
         if(data.proyectos?.length)G.D.proyectos=data.proyectos;
         if(data.equipos?.length)G.D.equipos=data.equipos;
         if(data.personas?.length)G.D.personas=data.personas;
+        if(Array.isArray(data.conductoresPipaIds))G.D.conductoresPipaIds=data.conductoresPipaIds;
+        else if(S.dieselCfgRespaldo?.conductoresPipaIds?.length)G.D.conductoresPipaIds=[...S.dieselCfgRespaldo.conductoresPipaIds];
+        try{localStorage.setItem('trego_diesel_v3',JSON.stringify({D:G.D,F:G.F}));}catch(e){}
         if(G.D.compras.length&&!G.F.ca_coid){
           G.F.ca_coid=G.D.compras[0].id;
           G.F.di_coid=G.D.compras[0].id;
@@ -4862,6 +4686,7 @@ function initGasolina(){
     });
     console.log('[GT Diesel] Listener activo');
   }
+  G._gIniciarListener=gIniciarListener;
   function gSaldoTanque(coid){const co=G.D.compras.find(c=>c.id===coid);if(!co)return 0;const cargado=G.D.cargas.filter(c=>c.compraId===coid).reduce((a,c)=>a+c.litros,0);return co.litrosDisponibles-cargado;}
   function gSaldoCarga(caid){const ca=G.D.cargas.find(c=>c.id===caid);if(!ca)return 0;const dist=G.D.distribuciones.filter(d=>d.cargaId===caid).reduce((a,d)=>a+d.litros,0);return ca.litros-dist;}
   function gMsgH(k){const m=G.MG[k];return m?`<div class="${m.ok?'mok':'mer'}">${gesc(m.ok||m.err)}</div>`:'';}
