@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNDMkFCNzQiLz48dGV4dCB4PSIzMiIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSIyOCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdUPC90ZXh0Pjwvc3ZnPg==">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#C2AB74">
-<meta name="gt-build" content="2026100208">
+<meta name="gt-build" content="2026101501">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -581,6 +581,9 @@ body.gt-rail-on #screen-main .nav-tabs #tab-btn-catalogo{display:none!important}
 .gt-paso-txt{display:block;margin-top:6px;font-size:12px;font-weight:600;color:var(--gold-txt)}
 @keyframes gtResalta{0%,100%{outline-color:rgba(194,171,116,1)}50%{outline-color:rgba(194,171,116,.25)}}
 .gt-resaltar{outline:3px solid var(--gold)!important;outline-offset:3px;animation:gtResalta .8s ease-in-out 5;border-radius:8px;position:relative;z-index:2}
+tr.gt-resaltar td{background:var(--gold-xlight)!important}
+.gt-editando{font-size:10px;color:#b26a00;white-space:nowrap;margin-top:2px}
+.gt-ir-gasto{color:inherit;text-decoration:underline;font-weight:700;cursor:pointer}
 
 /* ═════════════ DASHBOARD (barras sin Chart.js) ═════════════ */
 .db-bars{display:flex;flex-direction:column;gap:9px}
@@ -1705,7 +1708,7 @@ function limpiarBibliotecaVieja(){
       seBackfilleo=true;
       return true;
     }
-    const antiguedad=ahora-x.agregadoEn;
+    const antiguedad=ahora-Math.max(x.agregadoEn||0,x.liberadoEn||0); // 15-oct-2026: liberados cuentan desde que se liberaron
     if(antiguedad>limiteMs){ huboCambios=true; return false; }
     return true;
   });
@@ -1867,6 +1870,8 @@ async function guardarFusionado(col,id,localIn,opts={},esReintento=false){
     await _runTransaction(_db,async tx=>{
       const snap=await tx.get(ref);
       const srv=snap.exists()?snap.data():{};
+      // 15-oct-2026: validación opcional (solo «Editar gasto»): si falla, no se escribe nada
+      if(opts.validar){const _m=await opts.validar(snap.exists()?snap.data():null,tx);if(_m){const _e=new Error(_m);_e.code='gt-validacion';throw _e;}}
       const fus=_fusionar(base,local,_proyectar(srv,campos));
       const salida=campos?Object.assign({},srv,fus):fus;
       Object.assign(salida,opts.extra||{});
@@ -1879,6 +1884,11 @@ async function guardarFusionado(col,id,localIn,opts={},esReintento=false){
     }
     return true;
   }catch(e){
+    if(e&&e.code==='gt-validacion'){
+      if(_PEND[k]===registro)delete _PEND[k];
+      toast('⚠️ '+e.message+' No se guardó.',true);
+      return false;
+    }
     console.error('[GT] Error guardando '+k+':',e);
     if(_esErrorPermanente(e)){
       if(_PEND[k]===registro)delete _PEND[k];
@@ -1931,11 +1941,11 @@ async function fbSave(){
 // se perdió CAJA 09. Ahora cada caja vive en SU PROPIO documento
 // (colección "{base}_cajas", un doc por caja) — guardar una caja nunca
 // puede pisar el trabajo de nadie más en otra caja.
-async function guardarCaja(c){
+async function guardarCaja(c,extra){
   setSyncState('syncing');
   // Solo se aplican TUS cambios sobre la versión actual de la caja: si otra
   // persona agregó un gasto a la misma caja al mismo tiempo, no se pierde.
-  const ok=await guardarFusionado(getBase()+'_cajas',c.id,c,{baseObj:c,permitirSinBase:true,etiqueta:'caja '+(c.name||'')});
+  const ok=await guardarFusionado(getBase()+'_cajas',c.id,c,Object.assign({baseObj:c,permitirSinBase:true,etiqueta:'caja '+(c.name||'')},extra||{}));
   setSyncState(ok?'ok':'error');
   return ok;
 }
@@ -2845,21 +2855,22 @@ function renderCajaContent(){
   const tTot=c.gastos.reduce((s,g)=>s+(g.total||g.monto||0),0);
 
   const alertas=isAdmin()?c.gastos.filter(g=>g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14):[];
-  let alertHtml=alertas.length?`<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span><b>${alertas.length} factura(s)</b> con más de 2 semanas: ${alertas.map(g=>g.noFactura||'s/n').join(', ')}</span></div>`:'';
+  let alertHtml=alertas.length?`<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span><b>${alertas.length} factura(s)</b> con más de 2 semanas: ${alertas.map(g=>`<a href="#" class="gt-ir-gasto" title="Ver este gasto" onclick="event.preventDefault();irAFilaGasto([${c.gastos.indexOf(g)}])">${escapeHtml(g.noFactura||'s/n')}</a>`).join(', ')}</span></div>`:'';
 
   let repeatHtml='';
   if(isAdmin()&&c.tipo==='sf'){
-    const now=new Date();const descCount={};
-    c.gastos.forEach(g=>{
+    const now=new Date();const descCount={},descIdx={};
+    c.gastos.forEach((g,gi)=>{
       if(!g.registradoEn)return;
       const d=new Date(g.registradoEn);
       if(d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()){
         const k=(g.descripcion||'').toUpperCase();
         descCount[k]=(descCount[k]||0)+1;
+        (descIdx[k]=descIdx[k]||[]).push(gi);
       }
     });
     const reps=Object.entries(descCount).filter(([,v])=>v>=3);
-    if(reps.length)repeatHtml=`<div class="alert alert-warn"><i class="ti ti-repeat"></i><span>Gastos repetidos este mes (3+): <b>${reps.map(([k])=>k).join(', ')}</b></span></div>`;
+    if(reps.length)repeatHtml=`<div class="alert alert-warn"><i class="ti ti-repeat"></i><span>Gastos repetidos este mes (3+): <b>${reps.map(([k])=>`<a href="#" class="gt-ir-gasto" title="Ver estos gastos" onclick="event.preventDefault();irAFilaGasto([${descIdx[k].join(',')}])">${escapeHtml(k)}</a>`).join(', ')}</b></span></div>`;
   }
 
   let formHtml='';
@@ -2872,29 +2883,29 @@ function renderCajaContent(){
   if(c.tipo==='cf'){
     tbody=c.gastos.length?c.gastos.map((g,i)=>{
       const vieja=isAdmin()&&g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14;
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=btnEditarGasto(c,g)+(canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger gt-btn-borrar" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'');
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Esta factura se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
-      return `<tr class="${vieja?'row-alert':''}">
+      return `<tr class="${vieja?'row-alert':''}" data-gi="${i}" data-gid="${escapeHtml(g.id||'')}">
         <td>${fmtDate(g.fechaFactura)}</td><td>${escapeHtml(g.equipo||'')}${divBadge}</td><td>${escapeHtml(g.proveedor||'')}</td>
         <td>${escapeHtml(g.descripcion||'')}</td><td>${escapeHtml(g.noFactura||'')}</td>
         <td style="font-size:10px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.uuid||''}">${(g.uuid||'').substring(0,16)}…</td>
         <td style="text-align:right">${fmt(g.subtotal)}</td><td style="text-align:right">${fmt(g.iva)}</td>
         <td style="text-align:right;font-weight:700">${fmt(g.total)}</td>
         <td style="text-align:center">${adjIcon}</td>
-        <td>${delBtn}</td>
+        <td style="white-space:nowrap">${delBtn}</td>
       </tr>`;
     }).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px">Sin gastos</td></tr>';
   }else{
     tbody=c.gastos.length?c.gastos.map((g,i)=>{
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=btnEditarGasto(c,g)+(canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${i},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger gt-btn-borrar" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'');
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Este gasto se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
-      return `<tr>
+      return `<tr data-gi="${i}" data-gid="${escapeHtml(g.id||'')}">
         <td>${fmtDate(g.fecha)}</td><td>${escapeHtml(g.equipo||'')}${divBadge}</td><td>${escapeHtml(g.proveedor||'')}</td><td>${escapeHtml(g.segmento||'')}</td><td>${escapeHtml(g.descripcion||'')}<span id="dup-dot-${g.id}"></span></td>
         <td style="text-align:right;font-weight:700">${fmt(g.monto)}</td>
         <td style="text-align:center">${adjIcon}</td>
-        <td>${delBtn}</td>
+        <td style="white-space:nowrap">${delBtn}</td>
       </tr>`;
     }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Sin gastos</td></tr>';
   }
@@ -2923,12 +2934,22 @@ function renderCajaContent(){
     </div>`;
   }
 
+  // 15-oct-2026: comprobantes reemplazados (ya no se borran; se pueden descargar)
+  const _ant=Array.isArray(c.comprobantesAnteriores)?c.comprobantesAnteriores:[];
+  if(_ant.length){compHtml+=`<div class="card" style="margin-bottom:12px;font-size:12px">
+    <div class="section-title" style="font-size:12px"><i class="ti ti-history"></i> Comprobantes anteriores (${_ant.length})</div>
+    ${_ant.map((a,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="flex:1">${escapeHtml(a.name||'comprobante')} <span style="color:var(--text2)">· reemplazado por ${escapeHtml(a.reemplazadoPor||'?')} el ${fmtDate(a.reemplazadoEn)}</span></span><button class="btn-sm" title="Descargar" onclick="descargarComprobanteAnterior(${i})"><i class="ti ti-download"></i></button></div>`).join('')}
+  </div>`;}
+
   let compUploadHtml='';
   if(canUploadComprobante()){
+    // 15-oct-2026: un solo paso — se sube en cuanto se elige el archivo
     compUploadHtml=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-      <div class="label">adjuntar comprobante de pago</div>
-      <input type="file" id="comp-pago-file" accept=".pdf,image/*" style="margin-top:4px">
-      <button onclick="subirComprobante()" class="btn-gold btn-sm" style="margin-top:6px"><i class="ti ti-upload"></i> Adjuntar</button>
+      <div class="label">${c.comprobantePago?'reemplazar comprobante de pago':'adjuntar comprobante de pago'}</div>
+      <label id="comp-pago-label" class="btn-gold btn-sm" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border-radius:var(--radius-sm)"><i class="ti ti-upload"></i> ${c.comprobantePago?'Elegir otro archivo…':'Elegir archivo y subir…'}
+        <input type="file" id="comp-pago-file" accept=".pdf,image/*" style="display:none" onchange="subirComprobante()">
+      </label>
+      <span style="font-size:11px;color:var(--text2);margin-left:6px">Se sube en cuanto lo eliges (PDF o foto, máx. 25 MB).</span>
     </div>`;
   }
 
@@ -2987,6 +3008,7 @@ function renderCajaContent(){
       ${compUploadHtml}${notaHtml}${adminActions}
     </div>${hist}`;
 
+  vigilarCandados();pintarCandados();
   if(c.tipo==='sf'&&esJackOJennifer()){
     calcularDuplicadosPorGasto().then(mapa=>pintarDuplicadosEnTabla(mapa));
   }
@@ -3013,33 +3035,34 @@ window.filtrarTablaCaja=function(){
     tbody.innerHTML=filas.length?filas.map((g)=>{
       const oi=c.gastos.indexOf(g);
       const vieja=isAdmin()&&g.fechaFactura&&(new Date()-new Date(g.fechaFactura))/(864e5)>14;
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=btnEditarGasto(c,g)+(canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'cf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger gt-btn-borrar" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'');
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Esta factura se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
-      return `<tr class="${vieja?'row-alert':''}">
+      return `<tr class="${vieja?'row-alert':''}" data-gi="${oi}" data-gid="${escapeHtml(g.id||'')}">
         <td>${fmtDate(g.fechaFactura)}</td><td>${escapeHtml(g.equipo||'')}${divBadge}</td><td>${escapeHtml(g.proveedor||'')}</td>
         <td>${escapeHtml(g.descripcion||'')}</td><td>${escapeHtml(g.noFactura||'')}</td>
         <td style="font-size:10px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.uuid||''}">${(g.uuid||'').substring(0,16)}…</td>
         <td style="text-align:right">${fmt(g.subtotal)}</td><td style="text-align:right">${fmt(g.iva)}</td>
         <td style="text-align:right;font-weight:700">${fmt(g.total)}</td>
         <td style="text-align:center">${adjIcon}</td>
-        <td>${delBtn}</td>
+        <td style="white-space:nowrap">${delBtn}</td>
       </tr>`;
     }).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:12px">Sin resultados</td></tr>';
   }else{
     tbody.innerHTML=filas.length?filas.map((g)=>{
       const oi=c.gastos.indexOf(g);
-      const delBtn=canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'';
+      const delBtn=btnEditarGasto(c,g)+(canEdit()&&!isCerrada?`<button onclick="eliminarGasto(${oi},'sf','${escapeHtml(g.id||'')}')" class="btn-sm btn-danger gt-btn-borrar" style="padding:2px 6px"><i class="ti ti-trash"></i></button>`:'');
       const adjIcon=getAdjIconHtml(c,g);
       const divBadge=g.divisionId?` <span class="badge badge-open" style="font-size:9px" title="Este gasto se dividió entre ${g.divisionDe} proyectos">÷${g.divisionPct}%</span>`:'';
-      return `<tr>
+      return `<tr data-gi="${oi}" data-gid="${escapeHtml(g.id||'')}">
         <td>${fmtDate(g.fecha)}</td><td>${escapeHtml(g.equipo||'')}${divBadge}</td><td>${escapeHtml(g.proveedor||'')}</td><td>${escapeHtml(g.segmento||'')}</td><td>${escapeHtml(g.descripcion||'')}<span id="dup-dot-${g.id}"></span></td>
         <td style="text-align:right;font-weight:700">${fmt(g.monto)}</td>
         <td style="text-align:center">${adjIcon}</td>
-        <td>${delBtn}</td>
+        <td style="white-space:nowrap">${delBtn}</td>
       </tr>`;
     }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:12px">Sin resultados</td></tr>';
   }
+  pintarCandados();
   if(c.tipo==='sf'&&esJackOJennifer()){
     clearTimeout(window._dupSearchDebounce);
     window._dupSearchDebounce=setTimeout(()=>{
@@ -3050,7 +3073,10 @@ window.filtrarTablaCaja=function(){
 
 // ── ELIMINAR GASTO ────────────────────────────────
 window.eliminarGasto=async function(idx,tipo,gastoId){
+  // 15-oct-2026: si alguien lo está editando, no se puede eliminar
+  {const _aj=gastoId?candadoAjeno(S.activeCajaId,gastoId):null;if(_aj){toast(`${escapeHtml(_aj.usuario)} está editando este gasto. Espera a que termine.`,true);return;}}
   if(!confirm('¿Eliminar este gasto?'))return;
+  {const _aj=gastoId?candadoAjeno(S.activeCajaId,gastoId):null;if(_aj){toast(`${escapeHtml(_aj.usuario)} empezó a editar este gasto. No se eliminó.`,true);return;}}
   // Se busca la caja y el gasto DESPUÉS de confirmar, y por su id: si mientras
   // tanto otra persona agregó o quitó gastos, se borra el correcto.
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
@@ -3063,6 +3089,466 @@ window.eliminarGasto=async function(idx,tipo,gastoId){
   c.gastos.splice(pos,1);
   await guardarCaja(c);toast('Gasto eliminado');renderCajaContent();
 };
+
+// ══════════════════════════════════════════════════
+// LOTE 15-oct-2026 — editar gasto, candado de edición, liberar XML,
+// estado real de la Biblioteca, alertas que llevan al gasto.
+// Regla de Jack: NADA de lo que ya existe se modifica solo. Estas
+// funciones solo escriben cuando alguien las usa a mano.
+// ══════════════════════════════════════════════════
+const _MESES_GT=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function _mesNombreGT(key){const [a,m]=String(key||'').split('-');return (_MESES_GT[(+m||1)-1]||key)+' '+(a||'');}
+
+// ¿En qué gasto de ESTA empresa está este UUID? (datos ya cargados en pantalla)
+function ubicacionUUIDLocal(uuid){
+  if(!uuid)return null;
+  for(const c of (S.cajas||[])){
+    if((c.gastos||[]).some(g=>g&&g.uuid===uuid))return `la caja «${c.name||'sin nombre'}»`;
+  }
+  const kd=S.konfioData||{};
+  for(const k of Object.keys(kd)){
+    if(((kd[k]&&kd[k].gastos)||[]).some(g=>g&&g.uuid===uuid))return `KONFIO ${_mesNombreGT(k)}`;
+  }
+  return null;
+}
+
+// ── ALERTAS QUE LLEVAN AL GASTO ──────────────────
+window.irAFilaGasto=function(idxs){
+  const s=document.getElementById('caja-search');
+  if(s&&s.value){s.value='';filtrarTablaCaja();}
+  const filas=(idxs||[]).map(i=>document.querySelector('#caja-tbody tr[data-gi="'+i+'"]')).filter(Boolean);
+  if(!filas.length){toast('No encontré ese gasto en la tabla (pudo haberse eliminado).',true);return;}
+  filas[0].scrollIntoView({behavior:'smooth',block:'center'});
+  filas.forEach(f=>{f.classList.remove('gt-resaltar');void f.offsetWidth;f.classList.add('gt-resaltar');setTimeout(()=>f.classList.remove('gt-resaltar'),5000);});
+};
+
+// ── COMPROBANTES ANTERIORES (ya no se borran al reemplazar) ──
+window.descargarComprobanteAnterior=async function(i){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  const a=c&&(c.comprobantesAnteriores||[])[i];
+  if(!a||!(a.ghPath||a.url||a.data)){toast('Ese comprobante no está disponible',true);return;}
+  toast('Abriendo...');
+  try{
+    if(a.data&&!a.ghPath&&!a.url){const el=document.createElement('a');el.href=a.data;el.download=a.name||'comprobante';el.click();return;}
+    const blob=a.ghPath?await ghFetchRawBlob(a.ghPath):await (await fetch(a.url)).blob();
+    const el=document.createElement('a');el.href=URL.createObjectURL(blob);el.download=a.name||'comprobante';el.click();
+    setTimeout(()=>URL.revokeObjectURL(el.href),5000);
+  }catch(e){console.error('[GT] Error descargando comprobante anterior:',e);toast('No se pudo abrir el comprobante',true);}
+};
+
+// ══════════════════════════════════════════════════
+// CANDADO DE EDICIÓN (Firestore, colección "{base}_edicion")
+// Un documento por gasto que alguien está editando. Si alguien más lo
+// tiene, no se puede editar ni eliminar ese gasto. Vence solo a los 10
+// minutos sin "latido" (cierre de golpe, sin internet, se fue la luz).
+// ══════════════════════════════════════════════════
+const CANDADO_VENCE_MS=10*60*1000;
+const CANDADO_LATIDO_MS=60*1000;
+const MI_SESION_EDICION=genId();
+S.edicion={};
+let _edicionBase=null,_unsubEdicion=null,_candadoMio=null,_candadoTimer=null,_candadoVigia=null;
+function _colEdicion(base){return (base||getBase())+'_edicion';}
+function _llaveCandado(cajaId,gastoId){return String(cajaId)+'__'+String(gastoId);}
+function _candadoVivo(d){return !!(d&&d.latido&&(Date.now()-d.latido)<CANDADO_VENCE_MS);}
+// Quién tiene el gasto (si es otra persona/otra ventana); null si está libre
+function candadoAjeno(cajaId,gastoId){
+  const d=S.edicion&&S.edicion[_llaveCandado(cajaId,gastoId)];
+  if(!_candadoVivo(d))return null;
+  if(d.sesion===MI_SESION_EDICION)return null;
+  return d;
+}
+function vigilarCandados(){
+  if(!_db||!_onSnapshot||!_collection)return;
+  const base=getBase();
+  if(_edicionBase===base&&_unsubEdicion)return;
+  if(_unsubEdicion){try{_unsubEdicion();}catch(e){}_unsubEdicion=null;}
+  _edicionBase=base;S.edicion={};
+  _unsubEdicion=_onSnapshot(_collection(_db,_colEdicion(base)),snap=>{
+    if(_edicionBase!==base)return;
+    const m={};snap.forEach(d=>{m[d.id]=d.data();});
+    S.edicion=m;pintarCandados();
+  },err=>console.warn('[GT] No se pudo leer quién está editando:',err));
+}
+window.gtDejarDeVigilarCandados=function(){
+  if(_unsubEdicion){try{_unsubEdicion();}catch(e){}}
+  _unsubEdicion=null;_edicionBase=null;S.edicion={};
+};
+// Actualiza solo los botones de la tabla (no vuelve a dibujar la caja,
+// así no se pierde lo que alguien esté capturando en el formulario).
+function pintarCandados(){
+  const c=S.cajas&&S.cajas.find(x=>x.id===S.activeCajaId);
+  if(!c)return;
+  document.querySelectorAll('#caja-tbody tr[data-gid]').forEach(tr=>{
+    const gid=tr.getAttribute('data-gid');
+    const aj=candadoAjeno(c.id,gid);
+    tr.querySelectorAll('.gt-btn-editar,.gt-btn-borrar').forEach(b=>{
+      b.disabled=!!aj;
+      b.style.opacity=aj?'.35':'';
+      b.title=aj?`${aj.usuario} está editando este gasto`:(b.classList.contains('gt-btn-editar')?'Editar gasto':'Eliminar gasto');
+    });
+    let et=tr.querySelector('.gt-editando');
+    if(aj){
+      if(!et){et=document.createElement('div');et.className='gt-editando';tr.lastElementChild&&tr.lastElementChild.appendChild(et);}
+      et.textContent=`✏️ ${aj.usuario} editando`;
+    }else if(et)et.remove();
+  });
+}
+async function tomarCandado(cajaId,gastoId){
+  if(!_db||!_runTransaction||!_doc)throw Object.assign(new Error('sin-conexion'),{code:'unavailable'});
+  if(navigator.onLine===false)throw Object.assign(new Error('sin-conexion'),{code:'unavailable'});
+  const base=getBase(),ref=_doc(_db,_colEdicion(base),_llaveCandado(cajaId,gastoId));
+  let ocupado=null;
+  const nombre=S.user.name;
+  const txp=_runTransaction(_db,async tx=>{
+    ocupado=null;
+    const s=await tx.get(ref);
+    const d=s.exists()?s.data():null;
+    if(_candadoVivo(d)&&d.sesion!==MI_SESION_EDICION){ocupado=d;return;}
+    const ahora=Date.now();
+    tx.set(ref,{usuario:nombre,sesion:MI_SESION_EDICION,cajaId,gastoId,desde:ahora,latido:ahora});
+  });
+  const limite=new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error('tiempo-agotado'),{code:'unavailable'})),10000));
+  try{await Promise.race([txp,limite]);}
+  catch(e){
+    // Si la red respondió tarde y el candado sí quedó puesto, se quita para no bloquear a nadie
+    txp.then(()=>{if(!ocupado)_soltarRef(ref);}).catch(()=>{});
+    throw e;
+  }
+  if(ocupado)return{ocupado};
+  _candadoMio={base,ref,cajaId,gastoId,user:S.user,emp:S.empresa};
+  clearInterval(_candadoTimer);
+  // Latido: solo renueva si el candado SIGUE siendo mío (nunca lo vuelve a crear)
+  _candadoTimer=setInterval(async()=>{
+    const m=_candadoMio;if(!m)return;
+    try{
+      let mio=true;
+      await _runTransaction(_db,async tx=>{
+        const s=await tx.get(m.ref);const d=s.exists()?s.data():null;
+        mio=!!(d&&d.sesion===MI_SESION_EDICION);
+        if(mio)tx.set(m.ref,Object.assign({},d,{latido:Date.now()}));
+      });
+      if(!mio&&_candadoMio===m){
+        _candadoMio=null;
+        toast('⚠️ Tu edición estuvo inactiva demasiado tiempo y se cerró. Vuelve a abrirla.',true);
+        cerrarEditarGasto();
+      }
+    }catch(e){console.warn('[GT] Latido de edición no se pudo enviar:',e);}
+  },CANDADO_LATIDO_MS);
+  return{ok:true};
+}
+async function _soltarRef(ref){
+  try{
+    await _runTransaction(_db,async tx=>{
+      const s=await tx.get(ref);
+      if(s.exists()&&s.data().sesion===MI_SESION_EDICION)tx.delete(ref);
+    });
+  }catch(e){console.warn('[GT] No se pudo soltar el candado (vence solo en 10 min):',e);}
+}
+async function soltarCandado(){
+  const m=_candadoMio;_candadoMio=null;
+  clearInterval(_candadoTimer);_candadoTimer=null;
+  clearInterval(_candadoVigia);_candadoVigia=null;
+  if(!m)return;
+  await _soltarRef(m.ref);
+}
+// Al cerrar/recargar la pestaña se intenta soltar (si no se logra, vence solo)
+window.addEventListener('pagehide',()=>{const m=_candadoMio;if(m&&_deleteDoc){try{_deleteDoc(m.ref);}catch(e){}}});
+
+// ══════════════════════════════════════════════════
+// EDITAR GASTO — solo Jack y Jennifer, solo con la caja ABIERTA.
+// Lo que viene del XML (UUID, folio, fecha de factura, subtotal, IVA,
+// total) nunca se edita. En gastos divididos no se cambia ni el
+// equipo/proyecto ni el monto. El valor anterior queda en el historial
+// de la caja y en g.ediciones. El adjunto no se toca.
+// ══════════════════════════════════════════════════
+function puedeEditarGasto(c,g){
+  return !!(c&&g&&g.id&&c.estado==='abierta'&&canEdit()&&esJackOJennifer());
+}
+function btnEditarGasto(c,g){
+  if(!puedeEditarGasto(c,g))return'';
+  return `<button onclick="abrirEditarGasto('${escapeHtml(g.id)}')" class="btn-sm gt-btn-editar" title="Editar gasto" style="padding:2px 6px;margin-right:4px"><i class="ti ti-pencil"></i></button>`;
+}
+function camposEditablesGasto(c,g){
+  const div=!!g.divisionId;
+  if(c.tipo==='cf')return div?['proveedor','descripcion']:['equipo','proveedor','descripcion'];
+  return div?['fecha','proveedor','segmento','descripcion']:['fecha','equipo','proveedor','segmento','descripcion','monto'];
+}
+const ETQ_CAMPO_GASTO={fecha:'Fecha',equipo:'Equipo / proyecto',proveedor:'Proveedor',segmento:'Segmento',descripcion:'Descripción',monto:'Monto'};
+function _valGastoTxt(k,v){
+  if(k==='monto')return fmt(v);
+  if(k==='fecha')return v?fmtDate(v):'—';
+  return (v==null||v==='')?'—':String(v);
+}
+let _editando=null; // {cajaId,gastoId}
+window.abrirEditarGasto=async function(gid){
+  if(_editando){toast('Ya tienes abierta la edición de un gasto.',true);return;}
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  const g=c&&c.gastos.find(x=>x.id===gid);
+  if(!g){toast('Ese gasto ya no existe (otra persona lo pudo haber eliminado).',true);renderCajaContent();return;}
+  if(c.estado!=='abierta'){toast('La caja está cerrada: nadie puede modificar sus gastos.',true);return;}
+  if(!puedeEditarGasto(c,g)){toast('Solo Jack o Jennifer pueden editar gastos.',true);return;}
+  const aj=candadoAjeno(c.id,g.id);
+  if(aj){toast(`${escapeHtml(aj.usuario)} está editando este gasto. Espera a que termine.`,true);return;}
+  // Si esta caja tiene cambios esperando señal, no se mezcla una edición con ellos
+  if(_PEND[getBase()+'_cajas/'+c.id]){toast('⚠️ Esta caja tiene cambios que aún no llegan al servidor (sin señal). Espera a que se guarden para editar.',true);return;}
+  _editando={cajaId:c.id,gastoId:g.id};
+  window._gtOps++;
+  let r;
+  try{r=await tomarCandado(c.id,g.id);}
+  catch(e){console.warn('[GT] No se pudo tomar el candado:',e);r={error:true};}
+  finally{window._gtOps--;}
+  if(!r||r.error){_editando=null;toast('⚠️ Sin conexión con el servidor: no se puede editar ahora. Intenta de nuevo con internet.',true);return;}
+  if(r.ocupado){_editando=null;toast(`${escapeHtml(r.ocupado.usuario)} está editando este gasto. Espera a que termine.`,true);return;}
+  // Mientras se abría, ¿cambió algo?
+  const c2=S.cajas.find(x=>x.id===_editando.cajaId);const g2=c2&&c2.gastos.find(x=>x.id===gid);
+  if(!g2||c2.estado!=='abierta'||S.activeCajaId!==c2.id){await soltarCandado();_editando=null;toast('La caja o el gasto cambió mientras se abría. Intenta de nuevo.',true);renderCajaContent();return;}
+  pintarModalEditar(c2,g2);
+};
+function pintarModalEditar(c,g){
+  document.querySelectorAll('.gt-edit-ov').forEach(x=>x.remove());
+  const campos=camposEditablesGasto(c,g);
+  const kat=S.katalogo||{};
+  const catAll=[...(kat.maquinaria||[]),...(kat.vehiculo||[]),...(kat.area||[]),...(kat.proyecto||[])];
+  const opts=(lista,actual)=>{const l=lista.slice();if(actual&&!l.includes(actual))l.unshift(actual);return l.map(x=>`<option value="${escapeHtml(x)}"${x===actual?' selected':''}>${escapeHtml(x)}</option>`).join('');};
+  const campo=k=>{
+    const v=g[k];
+    if(k==='equipo')return `<select id="eg-equipo">${opts(catAll,v||'')}</select>`;
+    if(k==='segmento')return `<select id="eg-segmento"><option value="">Seleccionar…</option>${opts(SEGMENTOS_SF,v||'')}</select>`;
+    if(k==='fecha')return `<input type="date" id="eg-fecha" value="${escapeHtml(String(v||'').slice(0,10))}">`;
+    if(k==='monto')return `<input type="number" id="eg-monto" step="0.01" min="0" value="${v!=null&&v!==''?Number(v).toFixed(2):''}">`;
+    return `<input type="text" id="eg-${k}" value="${escapeHtml(v||'')}">`;
+  };
+  const fijos=[];
+  if(c.tipo==='cf'){
+    fijos.push(['Folio',g.noFactura||'—'],['Fecha factura',g.fechaFactura?fmtDate(g.fechaFactura):'—'],['UUID',g.uuid||'—'],['Total',fmt(g.total)]);
+    if(g.divisionId)fijos.unshift(['Equipo / proyecto',g.equipo||'—']);
+  }else if(g.divisionId){
+    fijos.push(['Equipo / proyecto',g.equipo||'—'],['Monto',fmt(g.monto)]);
+  }
+  const ov=document.createElement('div');
+  ov.className='modal-overlay gt-edit-ov';
+  ov.innerHTML=`<div class="modal-box" role="dialog" aria-label="Editar gasto">
+    <div class="section-title"><i class="ti ti-pencil"></i> Editar gasto</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Caja «${escapeHtml(c.name||'')}». El cambio queda en el historial de la caja. Mientras tengas esta ventana abierta, nadie más puede editar ni eliminar este gasto.</div>
+    ${g.divisionId?`<div class="alert alert-info" style="margin-bottom:10px"><i class="ti ti-info-circle"></i><span>Este gasto está dividido entre ${escapeHtml(String(g.divisionDe||''))} proyectos (${escapeHtml(String(g.divisionPct||''))}%). El proyecto y el monto no se pueden cambiar; el cambio aplica solo a esta parte.</span></div>`:''}
+    <div style="display:grid;gap:10px">
+      ${campos.map(k=>`<div><div class="label">${ETQ_CAMPO_GASTO[k]}</div>${campo(k)}</div>`).join('')}
+    </div>
+    ${fijos.length?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text2)">
+      <div style="font-weight:600;margin-bottom:4px"><i class="ti ti-lock"></i> No se pueden cambiar${c.tipo==='cf'?' (vienen del XML del SAT)':''}:</div>
+      ${fijos.map(([a,b])=>`<div>${a}: <b style="word-break:break-all">${escapeHtml(b)}</b></div>`).join('')}
+    </div>`:''}
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+      <button type="button" id="eg-cancelar">Cancelar</button>
+      <button type="button" id="eg-guardar" class="btn-gold"><i class="ti ti-check"></i> Guardar cambios</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const gid=g.id;
+  ov.querySelector('#eg-cancelar').onclick=()=>cerrarEditarGasto();
+  ov.querySelector('#eg-guardar').onclick=()=>guardarEdicionGasto(gid);
+  // Si la ventana se cierra por otro lado (tecla Esc, cambio de empresa, salir), se suelta el candado
+  clearInterval(_candadoVigia);
+  const userIni=S.user,empIni=S.empresa;
+  _candadoVigia=setInterval(()=>{
+    if(!_editando)return;
+    const sigue=document.body.contains(ov);
+    if(!sigue||S.user!==userIni||S.empresa!==empIni||S.activeCajaId!==_editando.cajaId)cerrarEditarGasto();
+  },700);
+  setTimeout(()=>{const f=ov.querySelector('input,select');if(f)f.focus();},50);
+}
+window.cerrarEditarGasto=function(){
+  document.querySelectorAll('.gt-edit-ov').forEach(x=>x.remove());
+  if(!_editando)return;
+  _editando=null;
+  soltarCandado();
+};
+let _guardandoEdicion=false;
+window.guardarEdicionGasto=async function(gid){
+  if(_guardandoEdicion)return;
+  if(!_editando||_editando.gastoId!==gid){cerrarEditarGasto();return;}
+  const c=S.cajas.find(x=>x.id===_editando.cajaId);
+  const g=c&&c.gastos.find(x=>x.id===gid);
+  if(!g){toast('Ese gasto ya no existe (otra persona lo eliminó). No se guardó.',true);cerrarEditarGasto();renderCajaContent();return;}
+  if(c.estado!=='abierta'){toast('La caja se cerró: ya no se puede modificar. No se guardó.',true);cerrarEditarGasto();renderCajaContent();return;}
+  if(!puedeEditarGasto(c,g)){toast('Sin permiso para editar.',true);cerrarEditarGasto();return;}
+  const campos=camposEditablesGasto(c,g);
+  const nuevos={};
+  for(const k of campos){
+    const el=document.getElementById('eg-'+k);if(!el)continue;
+    let v=(el.value||'').trim();
+    if(k==='monto'){
+      const n=parseFloat(v);
+      if(v===''||isNaN(n)||n<=0){toast('El monto debe ser mayor a 0.',true);el.focus();return;}
+      v=Math.round(n*100)/100;
+    }
+    nuevos[k]=v;
+  }
+  if('equipo' in nuevos&&!nuevos.equipo){toast('Elige el equipo / proyecto.',true);return;}
+  if('descripcion' in nuevos&&!nuevos.descripcion){toast('La descripción no puede quedar vacía.',true);return;}
+  if(c.tipo==='cf'&&'proveedor' in nuevos&&!nuevos.proveedor){toast('El proveedor no puede quedar vacío.',true);return;}
+  if('segmento' in nuevos&&!nuevos.segmento){toast('Elige el segmento.',true);return;}
+  if('fecha' in nuevos){
+    if(nuevos.fecha===''&&String(g.fecha||'')!==''){toast('La fecha no puede quedar vacía.',true);return;}
+    if(nuevos.fecha!==''&&!/^\d{4}-\d{2}-\d{2}$/.test(nuevos.fecha)){toast('Escribe una fecha válida.',true);return;}
+  }
+  const cambios=campos.filter(k=>{
+    if(!(k in nuevos))return false;
+    if(k==='monto')return Math.round((Number(g.monto)||0)*100)!==Math.round(nuevos.monto*100);
+    if(k==='fecha')return String(g.fecha||'').slice(0,10)!==nuevos.fecha;
+    return String(g[k]==null?'':g[k])!==String(nuevos[k]);
+  });
+  if(!cambios.length){toast('No cambiaste nada.');cerrarEditarGasto();return;}
+  _guardandoEdicion=true;window._gtOps++;
+  const btn=document.getElementById('eg-guardar');if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+  try{
+    const m=_candadoMio;
+    if(!m){toast('La edición se cerró. No se guardó.',true);cerrarEditarGasto();return;}
+    const kPend=getBase()+'_cajas/'+_editando.cajaId;
+    if(_PEND[kPend]){toast('⚠️ Esta caja tiene cambios que aún no llegan al servidor (sin señal). No se guardó; intenta en un momento.',true);return;}
+    // Aplicar sobre la versión MÁS RECIENTE de la caja (pudo llegar una actualización)
+    const cc=S.cajas.find(x=>x.id===_editando.cajaId);
+    const gg=cc&&cc.gastos.find(x=>x.id===gid);
+    if(!gg){toast('Ese gasto ya no existe (otra persona lo eliminó). No se guardó.',true);cerrarEditarGasto();renderCajaContent();return;}
+    if(cc.estado!=='abierta'){toast('La caja se cerró: ya no se puede modificar. No se guardó.',true);cerrarEditarGasto();renderCajaContent();return;}
+    const antes={},det={};
+    cambios.forEach(k=>{antes[k]=gg[k];det[k]={antes:gg[k]===undefined?null:gg[k],despues:nuevos[k]};});
+    const ts=new Date().toISOString();
+    const descAntes=gg.descripcion||gg.proveedor||'s/n';
+    const tieneEd=Array.isArray(gg.ediciones),edAntes=gg.ediciones;
+    cambios.forEach(k=>{gg[k]=nuevos[k];});
+    gg.ediciones=(tieneEd?edAntes:[]).concat([{ts,user:S.user.name,cambios:det}]);
+    if(!cc.historial)cc.historial=[];
+    const hEntry={ts,user:S.user.name,accion:`Gasto editado (${descAntes}): `+cambios.map(k=>`${ETQ_CAMPO_GASTO[k]}: ${_valGastoTxt(k,antes[k])} → ${_valGastoTxt(k,nuevos[k])}`).join('; ')};
+    cc.historial.push(hEntry);
+    let rechazo=null;
+    // Todo se revisa DENTRO de la transacción del guardado (en el servidor):
+    // la caja sigue abierta, el gasto existe y el candado sigue siendo mío.
+    const ok=await guardarCaja(cc,{
+      validar:async(srv,tx)=>{
+        rechazo=null;
+        if(!srv){rechazo='La caja ya no existe.';return rechazo;}
+        if(srv.estado!=='abierta'){rechazo='La caja se cerró mientras editabas: ya no se puede modificar.';return rechazo;}
+        if(!(srv.gastos||[]).some(x=>x&&x.id===gid)){rechazo='Ese gasto fue eliminado por otra persona.';return rechazo;}
+        const ls=await tx.get(m.ref);const ld=ls.exists()?ls.data():null;
+        if(!ld||ld.sesion!==MI_SESION_EDICION){rechazo='Tu edición ya no estaba protegida (venció o alguien más tomó el gasto).';return rechazo;}
+        return null;
+      }
+    });
+    if(!ok&&!rechazo){
+      // Sin señal: la edición NO se deja pendiente (se guardaría después sin revisar nada)
+      if(_PEND[kPend])delete _PEND[kPend];
+      rechazo='sin-senal';
+    }
+    if(rechazo){
+      if(rechazo==='sin-senal')toast('⚠️ Sin conexión con el servidor: la edición NO se guardó. Intenta de nuevo con internet.',true);
+      // Regresar en pantalla lo que se había cambiado (en el servidor no se escribió nada)
+      cambios.forEach(k=>{if(antes[k]===undefined)delete gg[k];else gg[k]=antes[k];});
+      if(tieneEd)gg.ediciones=edAntes;else delete gg.ediciones;
+      const hi=cc.historial.indexOf(hEntry);if(hi>=0)cc.historial.splice(hi,1);
+      cerrarEditarGasto();renderCajaContent();
+      return;
+    }
+    cerrarEditarGasto();
+    toast(ok?'Gasto actualizado ✓':'📶 Sin señal: el cambio se guardará solo cuando vuelva la conexión.',!ok);
+    renderCajaContent();
+  }finally{
+    _guardandoEdicion=false;window._gtOps--;
+    const b2=document.getElementById('eg-guardar');if(b2){b2.disabled=false;b2.innerHTML='<i class="ti ti-check"></i> Guardar cambios';}
+  }
+};
+
+// ══════════════════════════════════════════════════
+// BIBLIOTECA — estado REAL de cada XML (calculado con los gastos que
+// existen; solo en pantalla, no escribe nada) y botón «Liberar».
+// ══════════════════════════════════════════════════
+let _mapaUbic=null,_mapaUbicRef=null,_mapaUbicT=0;
+function _ubicRapida(uuid){
+  const ref=[S.cajas,S.konfioData];
+  if(!_mapaUbic||_mapaUbicRef[0]!==ref[0]||_mapaUbicRef[1]!==ref[1]||Date.now()-_mapaUbicT>1500){
+    const m=new Map();
+    (S.cajas||[]).forEach(c=>(c.gastos||[]).forEach(g=>{if(g&&g.uuid&&!m.has(g.uuid))m.set(g.uuid,`caja «${c.name||'sin nombre'}»`);}));
+    const kd=S.konfioData||{};
+    Object.keys(kd).forEach(k=>((kd[k]&&kd[k].gastos)||[]).forEach(g=>{if(g&&g.uuid&&!m.has(g.uuid))m.set(g.uuid,`KONFIO ${_mesNombreGT(k)}`);}));
+    _mapaUbic=m;_mapaUbicRef=ref;_mapaUbicT=Date.now();
+  }
+  return _mapaUbic.get(uuid)||null;
+}
+function estadoBiblioXML(x){
+  const donde=_ubicRapida(x&&x.uuid);
+  if(donde)return{txt:'Usado — '+donde,color:'#c0392b',usar:false,liberar:false};
+  if(!_BASES[getBase()+'/config'])return{txt:'Revisando…',color:'var(--text2)',usar:false,liberar:false};
+  if(x.usado)return{txt:'Usado — sin gasto',color:'#b26a00',usar:false,liberar:esJackOJennifer()&&canEdit()};
+  return{txt:'Disponible',color:'#1b5e20',usar:true,liberar:false};
+}
+function celdaEstadoBiblio(x){
+  const e=estadoBiblioXML(x);
+  return `<span style="color:${e.color};font-size:11px">${escapeHtml(e.txt)}</span>`;
+}
+function btnLiberarXML(x){
+  const e=estadoBiblioXML(x);
+  if(!e.liberar)return'';
+  return `<button onclick="liberarXML('${escapeHtml(x.uuid)}')" class="btn-sm" title="Volver a dejarlo disponible" style="margin-left:4px"><i class="ti ti-lock-open"></i> Liberar</button>`;
+}
+function refrescarVistasBiblio(){
+  try{
+    const f=document.getElementById('bib-filter');if(f&&document.getElementById('bib-table'))filtrarBiblio();
+    const fk=document.getElementById('kf-bib-filter');if(fk&&document.getElementById('kf-bib-table'))filtrarBiblioKonfio();
+    const r=document.getElementById('biblio-results'),rr=document.getElementById('biblio-rfc');
+    if(r&&r.innerHTML.trim()&&rr)buscarBiblioteca();
+    const rk=document.getElementById('kf-biblio-results'),rrk=document.getElementById('kf-biblio-rfc');
+    if(rk&&rk.innerHTML.trim()&&rrk&&rrk.value.trim())buscarBibliotecaKonfio();
+  }catch(e){console.warn('[GT] No se pudo refrescar la Biblioteca:',e);}
+}
+let _liberandoXML=false;
+window.liberarXML=async function(uuid){
+  if(!(esJackOJennifer()&&canEdit())){toast('Solo Jack o Jennifer pueden liberar un XML.',true);return;}
+  if(_liberandoXML)return;
+  const x=(S.biblioteca||[]).find(b=>b.uuid===uuid);
+  if(!x){toast('Ese XML ya no está en la Biblioteca.',true);refrescarVistasBiblio();return;}
+  if(!x.usado){toast('Ese XML ya está disponible.');refrescarVistasBiblio();return;}
+  const local=ubicacionUUIDLocal(uuid);
+  if(local){toast('No se puede liberar: la factura sigue registrada en '+escapeHtml(local)+'.',true);refrescarVistasBiblio();return;}
+  if(!confirm(`¿Liberar el XML ${x.noFact||''} de ${x.nombre||x.rfc||''}?\n\nVolverá a quedar «Disponible» para usarse otra vez. Antes reviso en el servidor que no esté en ningún gasto de las dos empresas.`))return;
+  _liberandoXML=true;
+  try{
+    const emp=S.empresa,usr=S.user;
+    const chk=await window.gtUuidEnServidor(uuid);
+    if(chk.cambio||S.empresa!==emp||S.user!==usr){toast('Cambiaste de empresa o de usuario mientras se revisaba. No se liberó.',true);return;}
+    if(chk.error){toast('⚠️ '+chk.error+' No se liberó.',true);return;}
+    if(chk.donde){toast('No se puede liberar: la factura sigue registrada en '+escapeHtml(chk.donde)+'.',true);refrescarVistasBiblio();return;}
+    const y=(S.biblioteca||[]).find(b=>b.uuid===uuid);
+    if(!y){toast('Ese XML ya no está en la Biblioteca.',true);return;}
+    if(!y.usado){toast('Ese XML ya está disponible.');refrescarVistasBiblio();return;}
+    const ahora=Date.now();
+    y.usado=false;
+    y.liberadoEn=ahora; // la limpieza de 60 días cuenta desde aquí
+    // Si alguien todavía tiene abierta la versión anterior de la app, su limpieza solo mira
+    // «agregadoEn»: se renueva aquí y la fecha original se conserva en «agregadoEnOriginal».
+    if(y.agregadoEnOriginal===undefined&&y.agregadoEn!==undefined)y.agregadoEnOriginal=y.agregadoEn;
+    y.agregadoEn=ahora;
+    y.liberaciones=(Array.isArray(y.liberaciones)?y.liberaciones:[]).concat([{ts:new Date(ahora).toISOString(),user:S.user.name}]);
+    const ok=await guardarBiblioteca();
+    toast(ok?'XML liberado ✓ — ya se puede volver a usar':'📶 Sin señal: se guardará solo cuando vuelva la conexión.',!ok);
+    refrescarVistasBiblio();
+  }finally{_liberandoXML=false;}
+};
+
+// Revisión en el SERVIDOR justo antes de registrar (cajas + KONFIO de las dos empresas)
+async function revisarUUIDAntesDeRegistrar(uuid){
+  if(typeof window.gtUuidEnServidor!=='function')return'⚠️ No se pudo verificar la factura. No se registró.';
+  const chk=await window.gtUuidEnServidor(uuid);
+  if(chk.cambio)return'Cambiaste de empresa o saliste mientras se revisaba la factura. No se registró.';
+  if(chk.error)return'⚠️ '+chk.error+' No se registró.';
+  if(chk.donde)return'⚠️ Esta factura (UUID) ya está registrada en '+escapeHtml(chk.donde)+'. No se registró.';
+  return null;
+}
+// Espera (máx. 8 s) a que lleguen los datos de la empresa antes de revisar un XML
+async function esperarDatosEmpresa(){
+  const t0=Date.now();
+  while(!_BASES[getBase()+'/config']&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,150));
+  return !!_BASES[getBase()+'/config'];
+}
 
 // ── FORM CON FACTURA ──────────────────────────────
 function buildFormCF(){
@@ -3349,7 +3835,7 @@ function parseXMLContent(txt,allUUIDs){
   if(estado.toLowerCase().includes('cancel'))return{err:'Factura CANCELADA — no se puede registrar'};
   let timbre=doc2.querySelector('TimbreFiscalDigital');
   const uuid=timbre?.getAttribute('UUID')||'';
-  if(uuid&&allUUIDs.includes(uuid))return{err:'UUID duplicado — esta factura ya fue registrada'};
+  if(uuid&&allUUIDs.includes(uuid)){const _d=ubicacionUUIDLocal(uuid);return{err:'UUID duplicado — esta factura ya fue registrada'+(_d?' en '+_d:'')};}
   const fecha=comp.getAttribute('Fecha')||'';
   const subtotal=parseFloat(comp.getAttribute('SubTotal')||'0');
   const total=parseFloat(comp.getAttribute('Total')||'0');
@@ -3375,7 +3861,9 @@ window.parseXML=function(e,ctx){
   const reader=new FileReader();
   reader.onload=async function(ev){
     const alertEl=document.getElementById(ctx==='caja'?'xml-alert':'konfio-xml-alert');
-    const res=parseXMLContent(ev.target.result,getAllUUIDs());
+    // 15-oct-2026: si los datos de la empresa (KONFIO incluido) aún no llegan, se espera antes de revisar
+    const _listo=await esperarDatosEmpresa();
+    const res=_listo?parseXMLContent(ev.target.result,getAllUUIDs()):{err:'Todavía se están cargando los datos de la empresa. Espera unos segundos y vuelve a cargar el XML.'};
     // 2-oct-2026: la misma factura (UUID) tampoco puede quedar en la OTRA empresa
     if(!res.err&&res.uuid){
       const cajaIni=S.activeCajaId;
@@ -3426,8 +3914,8 @@ window.buscarBiblioteca=function(){
       <td>${x.nombre||x.rfc}</td><td>${x.noFact}</td>
       <td>${x.fecha?new Date(x.fecha).toLocaleDateString('es-MX'):'—'}</td>
       <td style="text-align:right">${fmt(x.total)}</td>
-      <td>${x.usado?'<span style="color:#c0392b;font-size:11px">Usado</span>':'<span style="color:#1b5e20;font-size:11px">Disponible</span>'}</td>
-      <td>${!x.usado?`<button onclick="usarDeBiblioteca('${x.uuid}')" class="btn-gold btn-sm">Usar</button>`:''}</td>
+      <td>${celdaEstadoBiblio(x)}</td>
+      <td style="white-space:nowrap">${estadoBiblioXML(x).usar?`<button onclick="usarDeBiblioteca('${x.uuid}')" class="btn-gold btn-sm">Usar</button>`:''}${btnLiberarXML(x)}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 };
@@ -3435,7 +3923,7 @@ window.buscarBiblioteca=function(){
 window.usarDeBiblioteca=async function(uuid){
   const x=S.biblioteca.find(b=>b.uuid===uuid);
   if(!x)return;
-  if(getAllUUIDs().includes(uuid)){toast('UUID ya registrado',true);return;}
+  if(getAllUUIDs().includes(uuid)){const _d=ubicacionUUIDLocal(uuid);toast('UUID ya registrado'+(_d?' en '+_d:''),true);return;}
   const cajaIni=S.activeCajaId;
   const chk=await gtUuidEnOtraEmpresa(uuid);
   if(chk.cambio||S.activeCajaId!==cajaIni||!document.getElementById('f-nofact'))return;
@@ -3484,7 +3972,14 @@ window.limpiarFormSF=function(){
   if(document.getElementById('sf-div-panel'))setDividirSF(false);
 };
 
+// 15-oct-2026: evita doble registro por doble clic mientras se revisa la factura
+let _registrandoCF=false;
 window.registrarGastoCF=async function(){
+  if(_registrandoCF){toast('Espera, se está registrando el gasto…');return;}
+  _registrandoCF=true;
+  try{return await _registrarGastoCF0();}finally{_registrandoCF=false;}
+};
+async function _registrarGastoCF0(){
   const activeId=S.activeCajaId;
   let c=S.cajas.find(x=>x.id===activeId);
   const proveedor=document.getElementById('f-proveedor').value.trim();
@@ -3492,6 +3987,10 @@ window.registrarGastoCF=async function(){
   const uuid=document.getElementById('f-uuid').dataset?.uuid||document.getElementById('f-uuid').value;
   if(!uuid){toast('Carga un XML válido del SAT',true);return;}
   if(!proveedor||!desc){toast('Completa proveedor y descripción',true);return;}
+  // 15-oct-2026: justo antes de registrar se vuelve a revisar en el SERVIDOR (cajas + KONFIO de las dos empresas)
+  {const _msg=await revisarUUIDAntesDeRegistrar(uuid);if(_msg){toast(_msg,true);return;}
+   if(S.activeCajaId!==activeId){toast('Cambiaste de caja mientras se revisaba la factura. No se registró.',true);return;}
+   const _cc=S.cajas.find(x=>x.id===activeId);if(!_cc||_cc.estado!=='abierta'){toast('La caja se cerró mientras se revisaba la factura. No se registró.',true);return;}}
 
   const subtotalTotal=parseFloat(document.getElementById('f-subtotal').value)||0;
   const ivaTotal=parseFloat(document.getElementById('f-iva').value)||0;
@@ -3678,13 +4177,23 @@ window.eliminarComprobante=async function(){
   await guardarCaja(c);toast('Comprobante eliminado');renderCajaContent();
 };
 
+// 15-oct-2026: se sube en cuanto se elige el archivo. Si ya hay comprobante, se
+// pregunta antes de reemplazar y el anterior YA NO se borra de GitHub: queda en
+// c.comprobantesAnteriores para descargarlo.
+let _subiendoComprobante=false;
 window.subirComprobante=async function(){
+  const inp=document.getElementById('comp-pago-file');
+  const file=inp&&inp.files&&inp.files[0];
+  if(inp)inp.value=''; // así se puede volver a elegir el mismo archivo
   if(!canUploadComprobante()){toast('Sin permiso para subir comprobante',true);return;}
+  if(!file)return;
+  if(_subiendoComprobante){toast('Ya se está subiendo un comprobante; espera a que termine.',true);return;}
   const activeId=S.activeCajaId;
   let c=S.cajas.find(x=>x.id===activeId);
-  const file=document.getElementById('comp-pago-file').files[0];
-  if(!file){toast('Selecciona un archivo',true);return;}
+  if(!c){toast('Esta caja ya no está disponible, recarga la página',true);return;}
   if(file.size>25*1024*1024){toast('El archivo pesa más de 25 MB, es demasiado grande',true);return;}
+  if(c.comprobantePago&&!confirm(`Esta caja YA tiene comprobante de pago: «${c.comprobantePago.name}».\n\n¿Reemplazarlo por «${file.name}»?\n\nEl anterior NO se borra: queda guardado en «Comprobantes anteriores» de esta caja.`))return;
+  _subiendoComprobante=true;
   toast('Subiendo comprobante…');
   try{
     const path=`comprobantes/${activeId}_${Date.now()}_${file.name}`;
@@ -3692,16 +4201,17 @@ window.subirComprobante=async function(){
     // Re-obtener la caja justo antes de escribir: pudo llegar una actualización remota mientras subíamos
     c=S.cajas.find(x=>x.id===activeId);
     if(!c){toast('Esta caja ya no está disponible, recarga la página',true);return;}
-    if(c.comprobantePago?.ghPath&&c.comprobantePago?.sha){
-      eliminarArchivoGithub(c.comprobantePago.ghPath,c.comprobantePago.sha);
+    const anterior=c.comprobantePago||null;
+    if(anterior){
+      c.comprobantesAnteriores=(Array.isArray(c.comprobantesAnteriores)?c.comprobantesAnteriores:[]).concat([Object.assign({},anterior,{reemplazadoEn:new Date().toISOString(),reemplazadoPor:S.user.name})]);
     }
     c.comprobantePago={name:file.name,ghPath:path,sha};
-    c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Comprobante de pago adjuntado'});
-    await guardarCaja(c);toast('Comprobante adjuntado ✓');renderCajaContent();
+    c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:anterior?`Comprobante de pago reemplazado (antes: ${anterior.name||'sin nombre'})`:'Comprobante de pago adjuntado'});
+    await guardarCaja(c);toast(anterior?'Comprobante reemplazado ✓ (el anterior quedó guardado)':'Comprobante adjuntado ✓');renderCajaContent();
   }catch(e){
     console.error('[GT] Error subiendo comprobante:',e);
     toast('⚠️ No se pudo subir el comprobante: '+e.message,true);
-  }
+  }finally{_subiendoComprobante=false;}
 };
 
 window.guardarNota=async function(){
@@ -3970,12 +4480,13 @@ function renderBiblioteca(){
 function renderBibTable(items){
   if(!items.length)return'<div style="text-align:center;padding:20px;color:var(--text2)">Sin XMLs en la biblioteca</div>';
   return`<div class="tbl-wrap"><table>
-    <thead><tr><th>Proveedor</th><th>RFC</th><th>Folio</th><th>Fecha</th><th style="text-align:right">Total</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Proveedor</th><th>RFC</th><th>Folio</th><th>Fecha</th><th style="text-align:right">Total</th><th>Estado</th><th></th></tr></thead>
     <tbody>${items.map(x=>`<tr>
       <td>${x.nombre||''}</td><td style="font-size:11px">${x.rfc||''}</td>
       <td>${x.noFact||''}</td><td>${fmtDate(x.fecha)}</td>
       <td style="text-align:right">${fmt(x.total)}</td>
-      <td>${x.usado?'<span style="color:#c0392b;font-size:11px">Usado</span>':'<span style="color:#1b5e20;font-size:11px">Disponible</span>'}</td>
+      <td>${celdaEstadoBiblio(x)}</td>
+      <td style="white-space:nowrap">${btnLiberarXML(x)}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -4781,7 +5292,13 @@ window.eliminarGastoKonfio=async function(idx,gastoId){
   await fbSave();toast('Gasto eliminado');renderKonfio();
 };
 
+let _registrandoKF=false;
 window.registrarGastoKonfio=async function(){
+  if(_registrandoKF){toast('Espera, se está registrando el gasto…');return;}
+  _registrandoKF=true;
+  try{return await _registrarGastoKonfio0();}finally{_registrandoKF=false;}
+};
+async function _registrarGastoKonfio0(){
   const key=`${kState.anio}-${String(kState.mes).padStart(2,'0')}`;
   if(!S.konfioData[key])S.konfioData[key]={gastos:[],pagado:false};
   const proyecto=document.getElementById('kf-equipo').value;
@@ -4792,6 +5309,13 @@ window.registrarGastoKonfio=async function(){
   const uuid=uuidEl.dataset?.uuid||uuidEl.value;
   // Sin XML del SAT solo pueden registrar Jack y Jennifer
   if(!uuid&&!esJackOJennifer()){toast('Para registrar en KONFIO primero carga el XML del SAT. Solo Jack o Jennifer pueden registrar sin XML.',true);return;}
+  // 15-oct-2026: justo antes de registrar se vuelve a revisar en el SERVIDOR (cajas + KONFIO de las dos empresas)
+  if(uuid){
+    const _emp=S.empresa;
+    const _msg=await revisarUUIDAntesDeRegistrar(uuid);if(_msg){toast(_msg,true);return;}
+    if(S.empresa!==_emp){toast('Cambiaste de empresa mientras se revisaba la factura. No se registró.',true);return;}
+    if(!S.konfioData[key])S.konfioData[key]={gastos:[],pagado:false};
+  }
   const fechaFact=document.getElementById('kf-nofact').dataset?.rawFecha||'';
   const gasto={
     id:genId(),proyecto,proveedor,concepto,
@@ -4835,8 +5359,8 @@ window.buscarBibliotecaKonfio=function(){
       <td>${x.nombre||x.rfc}</td><td>${x.noFact}</td>
       <td>${x.fecha?new Date(x.fecha).toLocaleDateString('es-MX'):'—'}</td>
       <td style="text-align:right">${fmt(x.total)}</td>
-      <td>${x.usado?'<span style="color:#c0392b;font-size:11px">Usado</span>':'<span style="color:#1b5e20;font-size:11px">Disponible</span>'}</td>
-      <td>${!x.usado?`<button onclick="usarDeBibliotecaKonfio('${x.uuid}')" class="btn-gold btn-sm">Usar</button>`:''}</td>
+      <td>${celdaEstadoBiblio(x)}</td>
+      <td style="white-space:nowrap">${estadoBiblioXML(x).usar?`<button onclick="usarDeBibliotecaKonfio('${x.uuid}')" class="btn-gold btn-sm">Usar</button>`:''}${btnLiberarXML(x)}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 };
@@ -4844,7 +5368,7 @@ window.buscarBibliotecaKonfio=function(){
 window.usarDeBibliotecaKonfio=async function(uuid){
   const x=S.biblioteca.find(b=>b.uuid===uuid);
   if(!x)return;
-  if(getAllUUIDs().includes(uuid)){toast('UUID ya registrado',true);return;}
+  if(getAllUUIDs().includes(uuid)){const _d=ubicacionUUIDLocal(uuid);toast('UUID ya registrado'+(_d?' en '+_d:''),true);return;}
   const chk=await gtUuidEnOtraEmpresa(uuid);
   if(chk.cambio||!document.getElementById('kf-nofact'))return;
   if(chk.error){toast(chk.error,true);return;}
@@ -5734,6 +6258,7 @@ window.gtCortarConexion=function(){
   window._gtGen++;
   clearPresence();
   ['unsub','unsubCajas','unsubBiblioteca','unsubGhConfig'].forEach(k=>{if(S[k]){try{S[k]();}catch(e){}S[k]=null;}});
+  if(window.gtDejarDeVigilarCandados)gtDejarDeVigilarCandados(); // 15-oct-2026
   if(window._G?._gUnsub){try{window._G._gUnsub();}catch(e){}window._G._gUnsub=null;}
   S.cajas=[];S.biblioteca=[];S.konfioData={};S.activeCajaId=null;
   S.users=JSON.parse(JSON.stringify(USERS_DEFAULT));
@@ -5961,7 +6486,6 @@ refreshCurrentView=function(){_refresh0();railSync();botRecalcularPronto();if(ty
 
 // ── "Falta un paso": elegir archivo y no tocar el botón ──────────
 const PASOS={
-  'comp-pago-file':{btn:'button[onclick="subirComprobante()"]',txt:'Falta un paso: toca «Adjuntar» para subir el comprobante.',bot:'Elegiste el comprobante de pago pero todavía no lo subes. Toca «Adjuntar» para guardarlo.'},
   'f-adjunto':{btn:'button[onclick="registrarGastoCF()"]',txt:'El archivo se sube cuando tocas «Registrar gasto».',bot:'Elegiste un archivo para el gasto, pero se guarda hasta que tocas «Registrar gasto».'},
   'sf-adjunto':{btn:'button[onclick="registrarGastoSF()"]',txt:'El ticket se sube cuando tocas «Registrar».',bot:'Elegiste el ticket del gasto, pero se guarda hasta que tocas «Registrar».'},
   'sf-adjunto-cam':{btn:'button[onclick="registrarGastoSF()"]',txt:'La foto se sube cuando tocas «Registrar».',bot:'Tomaste la foto del ticket, pero se guarda hasta que tocas «Registrar».'}
@@ -5990,8 +6514,6 @@ document.addEventListener('click',e=>{
 },true);
 function avisarPasoPendiente(){
   if(!S.user||!S._sesionEmp)return;
-  const f=document.getElementById('comp-pago-file');
-  if(f&&f.files&&f.files.length){botDecir(PASOS['comp-pago-file'].bot+' (Regresa a la caja para terminar.)','📎');return;}
   for(const id of ['f-adjunto','sf-adjunto','sf-adjunto-cam']){
     const x=document.getElementById(id);
     if(x&&x.files&&x.files.length){botDecir('Dejaste un gasto a medias con un archivo elegido. No se guardó: regresa a la caja y toca «Registrar».','📎');return;}
@@ -6036,6 +6558,44 @@ window.gtUuidEnOtraEmpresa=async function(uuid){
     if(S.empresa!==emp||window._gtGen!==gen||S.user!==usr)return{cambio:true};
     console.warn('[GT] No se pudo revisar UUID en la otra empresa:',e);
     return{error:'No se pudo verificar en la otra empresa. Intenta de nuevo con conexión.'};
+  }finally{window._gtOps--;}
+};
+
+// 15-oct-2026: revisión de UUID para «Liberar XML» y para el botón «Registrar».
+// · Esta empresa: las cajas que ya están en pantalla (llegan en vivo del servidor)
+//   + KONFIO leído del SERVIDOR (1 lectura).
+// · La otra empresa: igual que hoy al cargar el XML (uuidsOtraEmpresa, del servidor).
+// Sin internet o sin respuesta SIEMPRE se bloquea.
+async function uuidsPropiaEmpresa(emp){
+  if(navigator.onLine===false)throw new Error('sin-conexion');
+  if(!_db||!_getDoc||!_doc)throw new Error('firebase-no-listo');
+  const base=emp==='cgt'?'cgt':'app',nombre=emp==='cgt'?'Comercial Trego':'Grupo Trego';
+  const L=await lectoresServidor();
+  const leerDoc=L?L.doc:_getDoc;
+  const limite=new Promise((_,rej)=>setTimeout(()=>rej(new Error('tiempo-agotado')),12000));
+  const snapCfg=await Promise.race([leerDoc(_doc(_db,base,'config')),limite]);
+  const m=new Map();
+  (S.cajas||[]).forEach(c=>(c.gastos||[]).forEach(g=>{if(g&&g.uuid&&!m.has(g.uuid))m.set(g.uuid,`${nombre} (caja «${c.name||'sin nombre'}»)`);}));
+  const kd=snapCfg.exists()?(snapCfg.data().konfioData||{}):{};
+  Object.keys(kd).forEach(mes=>((kd[mes]&&kd[mes].gastos)||[]).forEach(g=>{if(g&&g.uuid&&!m.has(g.uuid))m.set(g.uuid,`${nombre} (KONFIO ${nombreMes(mes)})`);}));
+  return m;
+}
+// Devuelve {donde} si el UUID ya está en algún gasto de CUALQUIERA de las dos
+// empresas, {error} si no se pudo revisar, {cambio:true} si mientras revisaba
+// la persona cambió de empresa o salió.
+window.gtUuidEnServidor=async function(uuid){
+  const emp=S.empresa,gen=window._gtGen,usr=S.user;
+  window._gtOps++;
+  try{
+    const [mia,otra]=await Promise.all([uuidsPropiaEmpresa(emp),uuidsOtraEmpresa(emp)]);
+    if(S.empresa!==emp||window._gtGen!==gen||S.user!==usr)return{cambio:true};
+    if(mia.has(uuid))return{donde:mia.get(uuid)};
+    if(otra.has(uuid))return{donde:otra.get(uuid)};
+    return{};
+  }catch(e){
+    if(S.empresa!==emp||window._gtGen!==gen||S.user!==usr)return{cambio:true};
+    console.warn('[GT] No se pudo revisar el UUID en el servidor:',e);
+    return{error:'No se pudo verificar la factura en el servidor. Revisa tu conexión e intenta de nuevo.'};
   }finally{window._gtOps--;}
 };
 
@@ -6374,6 +6934,13 @@ const FEMENINO=['Jennifer','América','Jessica'];
 function fbListo(ms){return esperar(()=>!!(_db&&_doc&&_getDoc&&_setDoc),ms);}
 // Novedades que se avisan UNA vez a quien ya había visto la bienvenida
 const NOVEDADES={
+  oct26:{para:['Jennifer'],txt:[
+    'En Comercial GT ya puedes editar gastos de cajas abiertas con el lápiz ✏️ al final de la fila. Lo que viene del XML no se cambia y todo queda en el historial. Si alguien más está editando ese gasto, te aviso y no te dejo entrar.',
+    'En la Biblioteca de XML puedes liberar un XML que dice «Usado» si su gasto ya se eliminó, para volver a usarlo.',
+    'El comprobante de pago ahora se sube en cuanto eliges el archivo. Si la caja ya tenía uno, te pregunto antes de reemplazarlo y el anterior queda guardado para descargarlo.',
+    'En las alertas de facturas con más de 2 semanas y de gastos repetidos, toca el folio y te llevo directo al gasto.',
+    'En Grupo Trego sigues igual: solo consulta.'
+  ]},
   sua:{para:['Jennifer'],txt:'Tu app ahora tiene el módulo SUA vs IDSE, además puedes comparar cédulas mensuales y bimestrales.'}
 };
 function novedadesDe(nombre){return Object.keys(NOVEDADES).filter(k=>NOVEDADES[k].para.includes(nombre));}
@@ -6425,7 +6992,7 @@ async function revisarBienvenida(){
   ov.querySelector('.tb-bienv-tit').textContent=esBienv?`¡${fem?'Bienvenida':'Bienvenido'}, ${nombre}!`:`¡Hay algo nuevo, ${nombre}!`;
   const txt=ov.querySelector('.tb-bienv-txt');
   if(esBienv)txt.textContent='Seré tu asistente. Te ayudaré en lo que pueda y te avisaré cada vez que pase algo importante. Si tienes una duda, tócame y pregúntame.';
-  novs.forEach(c=>{const n=document.createElement('div');n.className='tb-bienv-nov';n.textContent=NOVEDADES[c].txt;txt.appendChild(n);});
+  novs.forEach(c=>{[].concat(NOVEDADES[c].txt).forEach(t=>{const n=document.createElement('div');n.className='tb-bienv-nov';n.textContent=t;txt.appendChild(n);});});
   document.body.appendChild(ov);
   const app=document.getElementById('app');if(app)app.inert=true;
   const okb=ov.querySelector('#tb-bienv-ok');setTimeout(()=>okb.focus(),50);
@@ -6481,7 +7048,7 @@ function calcularAvisos(){
     if(viejas.length)add({k:'fact14-am-'+hoy.fecha,icono:'⚠️',texto:`Tienes ${viejas.length} factura${viejas.length>1?'s':''} con más de 2 semanas en cajas abiertas (${listaNombres([...new Set(viejas.map(c=>c.name))])}).`,accion:'Ver caja',fn:()=>irCaja(viejas[0].id)});
     const vacias=abiertas.filter(c=>!(c.gastos||[]).length);
     if(vacias.length)add({k:'vacia-'+hoy.fecha,icono:'🗂️',texto:`${vacias.length>1?'Las cajas':'La caja'} ${listaNombres(vacias.map(c=>c.name))} ${vacias.length>1?'están abiertas y no tienen':'está abierta y no tiene'} gastos. Revisa antes de cerrar${vacias.length>1?'las':'la'}.`,accion:'Ver caja',fn:()=>irCaja(vacias[0].id)});
-    const porBorrar=(S.biblioteca||[]).filter(x=>!x.usado&&x.agregadoEn&&(ahora-x.agregadoEn)>(DIAS_LIMITE_BIBLIOTECA-7)*DIAS_MS);
+    const porBorrar=(S.biblioteca||[]).filter(x=>!x.usado&&x.agregadoEn&&(ahora-Math.max(x.agregadoEn,x.liberadoEn||0))>(DIAS_LIMITE_BIBLIOTECA-7)*DIAS_MS);
     if(porBorrar.length)add({k:'biblio-'+hoy.fecha,icono:'🗃️',texto:`${porBorrar.length} XML de la Biblioteca de ${empN} se borrará${porBorrar.length>1?'n':''} en los próximos 7 días si no se usa${porBorrar.length>1?'n':''}.`,accion:'Ver Biblioteca',fn:()=>gtEntrar(S.empresa,'cajas','biblioteca')});
     if(configCargada()&&puede(S.empresa,'konfio')&&canEditKonfio()){
       const prev=new Date(hoy.anio,hoy.mes-2,1),pk=prev.getFullYear()+'-'+String(prev.getMonth()+1).padStart(2,'0');
@@ -6673,8 +7240,8 @@ const TEMAS=[
    go:()=>canEdit()?()=>{const c=cajaActual();if(enCaja()&&c&&c.tipo==='sf'&&c.estado==='abierta')resaltar('label:has(#sf-adjunto-cam)');else irYResaltar(S.empresa,'cajas','cajas-sf','.card[onclick^="abrirCaja"]','Primero crea o abre una caja sin factura.');}:null},
   {id:'comprobante',q:'¿Cómo subo el comprobante de pago?',kw:['comprobante','pago','subir comprobante','adjuntar','no puedo subir','transferencia'],
    disp:()=>puede(S.empresa,'cajas'),
-   txt:()=>canUploadComprobante()?'1) Abre la caja. 2) Abajo de la tabla, en «adjuntar comprobante de pago», elige el archivo (PDF o foto, máximo 25 MB). 3) Toca «Adjuntar». Son dos pasos: si no tocas «Adjuntar», el comprobante NO se sube.':'Solo Jack, Jessica, Max y Jennifer pueden subir comprobantes de pago. Tú sí puedes verlos y descargarlos.',
-   go:()=>canUploadComprobante()?()=>{if(enCaja())resaltar('#comp-pago-file');else irYResaltar(S.empresa,'cajas','cajas-cf','.card[onclick^="abrirCaja"]','Abre la caja a la que le quieres subir el comprobante.');}:null},
+   txt:()=>canUploadComprobante()?'1) Abre la caja. 2) Abajo de la tabla toca «Elegir archivo y subir…» y elige el PDF o la foto (máximo 25 MB). Se sube en cuanto lo eliges. Si la caja ya tenía comprobante, te pregunto antes de reemplazarlo y el anterior queda guardado en «Comprobantes anteriores».':'Solo Jack, Jessica, Max y Jennifer pueden subir comprobantes de pago. Tú sí puedes verlos y descargarlos.',
+   go:()=>canUploadComprobante()?()=>{if(enCaja())resaltar('#comp-pago-label');else irYResaltar(S.empresa,'cajas','cajas-cf','.card[onclick^="abrirCaja"]','Abre la caja a la que le quieres subir el comprobante.');}:null},
   {id:'pagada',q:'¿Cómo marco una caja como pagada?',kw:['pagada','pagado','marcar pagado','estatus','no pagada'],
    disp:()=>puede(S.empresa,'cajas'),
    txt:()=>isAdmin()?'Dentro de la caja, arriba a la derecha, toca «Marcar pagado». Si te equivocas, el mismo botón dice «Marcar no pagado».':'Solo los administradores (Jessica, Max, Jack, Jennifer y Alan) marcan cajas como pagadas.',
@@ -6685,8 +7252,19 @@ const TEMAS=[
    go:()=>()=>{if(enCaja())resaltar('button[onclick="exportarCaja()"]');else irYResaltar(S.empresa,'cajas','cajas-cf','button[onclick^="exportConsolidado"]');}},
   {id:'eliminar',q:'¿Cómo elimino un gasto?',kw:['eliminar','borrar','quitar gasto','me equivoque','error en gasto'],
    disp:()=>puede(S.empresa,'cajas'),
-   txt:()=>canEdit()?'En la tabla de la caja (solo si está abierta), al final de la fila está el botón rojo con el bote de basura. Confirma y se elimina. Queda anotado en el historial de la caja.':'Tu usuario es de solo consulta: no puede eliminar gastos.',
+   txt:()=>canEdit()?'En la tabla de la caja (solo si está abierta), al final de la fila está el botón rojo con el bote de basura. Confirma y se elimina. Queda anotado en el historial de la caja. Si alguien está editando ese gasto, no se puede eliminar hasta que termine.':'Tu usuario es de solo consulta: no puede eliminar gastos.',
    go:()=>canEdit()?()=>{if(enCaja())resaltar('#caja-tbody .btn-danger','Esta caja no tiene gastos que se puedan eliminar (o está cerrada).');else irYResaltar(S.empresa,'cajas','cajas-cf','.card[onclick^="abrirCaja"]');}:null},
+  {id:'editar',q:'¿Cómo edito o corrijo un gasto?',kw:['editar','corregir','cambiar gasto','modificar','me equivoque','lapiz','lápiz','cambiar monto','cambiar proveedor'],
+   disp:()=>puede(S.empresa,'cajas'),
+   txt:()=>esJackOJennifer()&&canEdit()?'En una caja ABIERTA toca el lápiz ✏️ al final de la fila. Con factura puedes cambiar equipo, proveedor y descripción (lo que viene del XML no se cambia). Sin factura también fecha, segmento y monto. En gastos divididos solo los textos. Todo queda en el historial. Mientras lo editas nadie más puede editarlo ni eliminarlo; si otra persona lo tiene abierto, te aviso quién. Con la caja cerrada nadie puede modificar nada.':(usuarioBase()&&usuarioBase().name==='Jennifer'?'En Grupo Trego eres solo consulta. Puedes editar gastos en Comercial GT.':'Solo Jack o Jennifer pueden editar gastos. Pídeselo a ellos, o elimina el gasto y regístralo otra vez mientras la caja esté abierta.'),
+   go:()=>esJackOJennifer()&&canEdit()?()=>{if(enCaja())resaltar('#caja-tbody .gt-btn-editar','Esta caja no tiene gastos que se puedan editar (o está cerrada).');else irYResaltar(S.empresa,'cajas','cajas-cf','.card[onclick^="abrirCaja"]','Abre una caja abierta.');}:null},
+  {id:'liberar',q:'¿Cómo libero un XML para volver a usarlo?',kw:['liberar','xml usado','usado','volver a usar','reusar','sin gasto'],
+   disp:()=>puede(S.empresa,'cajas')&&!isViewer(),
+   txt:()=>esJackOJennifer()&&canEdit()?'Entra a la Biblioteca. Los XML que dicen «Usado — sin gasto» se marcaron como usados pero su gasto ya se eliminó: toca «Liberar». Antes reviso en el servidor que no esté en ningún gasto de las dos empresas; si sigue registrado, no te dejo y te digo dónde está. Después de liberarlo tiene 60 días para volver a usarse.':'Solo Jack o Jennifer pueden liberar un XML. Si te sale «Usado» y su gasto ya se eliminó, pídeselo a ellos.',
+   go:()=>()=>gtEntrar(S.empresa,'cajas','biblioteca')},
+  {id:'uuiddup',q:'Me sale «UUID duplicado», ¿dónde está la factura?',kw:['uuid','duplicado','ya fue registrada','ya registrado','factura repetida','donde esta la factura'],
+   disp:()=>puede(S.empresa,'cajas')&&!isViewer(),
+   txt:()=>'Esa factura ya está registrada en un gasto. El mensaje te dice dónde: la caja (con su nombre) o el mes de KONFIO, de esta empresa o de la otra. Un mismo XML no puede usarse dos veces (ni en cajas y KONFIO a la vez). Si fue un error, pide a Jack o a Jennifer que eliminen ese gasto y liberen el XML en la Biblioteca.'},
   {id:'konfio',q:'¿Cómo registro un gasto en KONFIO?',kw:['konfio','tarjeta','registrar konfio'],
    disp:()=>puede(S.empresa,'konfio'),
    txt:()=>canEditKonfio()?'Entra a «KONFIO» → «Registro». Elige el mes con las flechas, toca «Cargar XML del SAT», completa los datos y toca «Registrar».'+(esJackOJennifer()?' Tú también puedes registrar sin XML si hace falta.':' El XML es obligatorio: sin XML no se puede registrar (solo Jack o Jennifer pueden).'):'Tu usuario solo puede consultar KONFIO.',
@@ -6709,7 +7287,7 @@ const TEMAS=[
    go:()=>()=>gtEntrar('gt','ordenes')},
   {id:'biblio',q:'¿Qué es la Biblioteca de XML?',kw:['biblioteca','xml guardados','rfc','se borran'],
    disp:()=>puede(S.empresa,'cajas')&&!isViewer(),
-   txt:()=>'Guarda los XML que subes y todavía no se usan en una caja. Desde una caja con factura puedes buscarlos por RFC con «Buscar en Biblioteca». Los que no se usan en 60 días se borran solos; los usados nunca se borran.',
+   txt:()=>'Guarda los XML que subes. Desde una caja con factura puedes buscarlos por RFC con «Buscar en Biblioteca». El estado sale de los gastos reales: «Usado — caja …» o «Usado — KONFIO …» dice dónde está; «Usado — sin gasto» es uno cuyo gasto ya se eliminó (Jack o Jennifer pueden liberarlo); «Disponible» se puede usar. Los no usados se borran solos a los 60 días (los liberados, 60 días desde que se liberan); los usados nunca se borran.',
    go:()=>()=>gtEntrar(S.empresa,'cajas','biblioteca')},
   {id:'duplicado',q:'¿Qué significa el punto rojo?',kw:['punto rojo','duplicado','duplicada','repetido','alerta roja','triangulo'],
    disp:()=>puede(S.empresa,'cajas'),
@@ -6735,7 +7313,7 @@ const TEMAS=[
   {id:'permisos',q:'¿Por qué no puedo hacer algo?',kw:['no puedo','no me deja','permiso','acceso','no aparece','bloqueado'],
    disp:()=>true,
    txt:()=>{const a=accesos(usuarioBase());const mods=Object.keys(a).map(e=>`${nombreEmp(e)}: ${a[e].map(m=>MODS[m].n).join(', ')}`).join(' · ');
-     const p=[];if(canEdit())p.push('registrar y eliminar gastos');if(isAdmin()||gtEsAmerica())p.push('cerrar cajas');if(esJackOJennifer())p.push('reabrir cajas');if(canUploadComprobante())p.push('subir comprobantes de pago');if(isAdmin())p.push('marcar cajas pagadas');
+     const p=[];if(canEdit())p.push('registrar y eliminar gastos');if(isAdmin()||gtEsAmerica())p.push('cerrar cajas');if(esJackOJennifer())p.push('reabrir cajas');if(esJackOJennifer()&&canEdit())p.push('editar gastos de cajas abiertas','liberar XML');if(canUploadComprobante())p.push('subir comprobantes de pago');if(isAdmin())p.push('marcar cajas pagadas');
      return `Tus módulos: ${mods}. Puedes: ${p.length?p.join(', '):'solo consultar'}. Si necesitas algo más, pídeselo a Jack.`;},
    go:()=>null}
 ];
