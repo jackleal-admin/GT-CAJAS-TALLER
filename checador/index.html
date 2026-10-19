@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0F0F0F">
+<title>GT Checador (prueba)</title>
+<style>
+/* Kiosco de tablet en obra: cámara a pantalla completa, barra superior con obra y reloj,
+   barra inferior con PIN y administración. Diseño oscuro fijo (pantalla siempre encendida). */
+:root{
+  --negro:#0F0F0F;--panel:#1B1915;--panel2:#26231E;--linea:#3A3530;
+  --texto:#F2EEE4;--texto2:#B6AE9E;
+  --gold:#C2AB74;--gold-dark:#A8924F;
+  --verde:#4CAF50;--verde-bg:#16301A;--rojo:#EF5350;--rojo-bg:#3A1717;--ambar:#FFB300;
+  --radio:14px;
+  --f:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--negro);color:var(--texto);font-family:var(--f);-webkit-tap-highlight-color:transparent}
+body{overflow:hidden;user-select:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 18px;background:var(--panel2)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+button.pri{background:var(--gold);color:#1A1608;font-weight:700}
+button.pri:active{background:var(--gold-dark)}
+button.peligro{background:var(--rojo-bg);color:#FFCDD2}
+button:disabled{opacity:.45;cursor:default}
+input,select{font:inherit;color:var(--texto);background:var(--negro);border:1px solid var(--linea);border-radius:10px;padding:11px 12px;width:100%;user-select:text}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--texto2)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ───── KIOSCO ───── */
+#kiosko{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
+.k-top,.k-bot{display:flex;align-items:center;gap:16px;padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));background:var(--negro);z-index:2}
+.k-top{padding-top:calc(12px + env(safe-area-inset-top,0px))}
+.k-bot{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between}
+.marca{font-weight:800;letter-spacing:.06em;color:var(--gold);font-size:18px;white-space:nowrap}
+.marca span{color:var(--texto2);font-weight:500;letter-spacing:.02em}
+#k-obra{flex:1;min-width:0;font-size:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#k-obra small{display:block;font-size:11px;font-weight:500;color:var(--texto2);letter-spacing:.08em;text-transform:uppercase}
+#k-reloj{text-align:right;font-size:30px;font-weight:700;line-height:1}
+#k-reloj small{display:block;font-size:12px;font-weight:500;color:var(--texto2);margin-top:4px}
+.k-cam{position:relative;overflow:hidden;background:#000}
+.k-cam video,.k-cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.guia{position:absolute;left:50%;top:48%;width:min(46vw,46vh);aspect-ratio:3/4;transform:translate(-50%,-50%);border-radius:50%;border:4px dashed rgba(255,255,255,.35);transition:border-color .2s,box-shadow .2s;pointer-events:none}
+.guia.buscando{border-color:var(--gold);border-style:solid}
+.guia.ok{border-color:var(--verde);border-style:solid;box-shadow:0 0 0 9999px rgba(0,0,0,.35)}
+.guia.mal{border-color:var(--rojo);border-style:solid}
+.k-msg{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);max-width:calc(100% - 32px);background:rgba(15,15,15,.82);backdrop-filter:blur(6px);padding:14px 22px;border-radius:999px;font-size:clamp(17px,2.6vw,24px);font-weight:600;text-align:center;text-wrap:balance}
+.k-msg.mal{background:rgba(58,23,23,.92);color:#FFCDD2}
+.k-res{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);padding:16px;z-index:3}
+.res-card{background:var(--panel);border-radius:22px;padding:28px;display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;max-width:640px;width:100%;border-top:8px solid var(--verde)}
+.res-card.salida{border-top-color:var(--gold)}
+.res-card.aviso{border-top-color:var(--ambar)}
+.res-card img{width:132px;height:132px;border-radius:16px;object-fit:cover;background:var(--panel2)}
+.res-tipo{font-size:15px;font-weight:800;letter-spacing:.14em;color:var(--verde)}
+.res-card.salida .res-tipo{color:var(--gold)}
+.res-card.aviso .res-tipo{color:var(--ambar)}
+.res-nombre{font-size:clamp(22px,3.6vw,34px);font-weight:700;margin:6px 0 4px;text-wrap:balance}
+.res-hora{font-size:clamp(34px,6vw,56px);font-weight:800;line-height:1}
+.res-sub{color:var(--texto2);margin-top:8px;font-size:15px}
+.k-setup{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.8);z-index:3}
+.k-setup>div{background:var(--panel);border-radius:var(--radio);padding:28px;max-width:520px;display:flex;flex-direction:column;gap:14px}
+.k-setup h2{margin:0;color:var(--gold)}
+.k-setup p{margin:0;color:var(--texto2);line-height:1.5}
+#k-estado{font-size:12px;color:var(--texto2);text-align:center;flex:1}
+.k-bot button{padding:14px 22px;font-size:16px}
+
+/* ───── MODALES ───── */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.caja{background:var(--panel);border-radius:18px;padding:24px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:16px;max-height:100%;overflow:auto}
+.caja h3{margin:0;font-size:20px}
+.caja p{margin:0;color:var(--texto2);line-height:1.5}
+.pin-pts{display:flex;justify-content:center;gap:14px;height:22px}
+.pin-pts i{width:18px;height:18px;border-radius:50%;border:2px solid var(--texto2)}
+.pin-pts i.on{background:var(--gold);border-color:var(--gold)}
+.teclado{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.teclado button{font-size:26px;font-weight:600;padding:16px 0}
+.fila{display:flex;gap:10px;flex-wrap:wrap}
+.fila>*{flex:1}
+.enrol-cam{position:relative;aspect-ratio:4/3;border-radius:14px;overflow:hidden;background:#000}
+.enrol-cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.barra{height:10px;background:var(--panel2);border-radius:99px;overflow:hidden}
+.barra i{display:block;height:100%;width:0;background:var(--gold);transition:width .25s}
+
+/* ───── ADMINISTRACIÓN ───── */
+#admin{position:fixed;inset:0;background:var(--negro);z-index:10;display:flex;flex-direction:column;user-select:text}
+.a-top{display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--linea);flex-wrap:wrap}
+.a-top h2{margin:0;font-size:18px;flex:1;min-width:160px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{background:transparent;padding:10px 14px}
+.tabs button[aria-selected="true"]{background:var(--panel2);color:var(--gold);font-weight:700}
+.a-cuerpo{flex:1;overflow:auto;padding:20px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.a-cuerpo>section{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.tarjeta{background:var(--panel);border-radius:var(--radio);padding:18px;display:flex;flex-direction:column;gap:14px}
+.tarjeta h4{margin:0;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+.grid-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}
+.check{flex-direction:row;align-items:flex-start;gap:10px;color:var(--texto);font-size:14px;line-height:1.45}
+.check input{width:22px;height:22px;flex:none;margin-top:1px}
+.lista{display:flex;flex-direction:column;gap:8px}
+.emp{display:grid;grid-template-columns:56px 1fr auto;gap:14px;align-items:center;background:var(--panel2);border-radius:12px;padding:10px 12px}
+.emp img,.emp .sinfoto{width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--negro);display:flex;align-items:center;justify-content:center;color:var(--texto2);font-size:11px;text-align:center}
+.emp b{display:block;font-size:16px}
+.emp small{color:var(--texto2)}
+.emp .acc{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.emp .acc button{padding:9px 12px;font-size:14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:var(--panel);color:var(--texto2);margin-left:6px;vertical-align:middle}
+.chip.ok{background:var(--verde-bg);color:#A5D6A7}
+.chip.no{background:var(--rojo-bg);color:#FFCDD2}
+.chip.ent{background:var(--verde-bg);color:#A5D6A7}
+.chip.sal{background:#3A3020;color:var(--gold)}
+.vacio{color:var(--texto2);padding:16px;text-align:center;border:1px dashed var(--linea);border-radius:12px}
+.tabla-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--linea)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--linea);white-space:nowrap}
+th{background:var(--panel2);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--texto2);position:sticky;top:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td img{width:40px;height:40px;border-radius:8px;object-fit:cover;display:block}
+tr.exceso td{background:var(--rojo-bg)}
+.nota{font-size:13px;color:var(--texto2);line-height:1.5}
+.obra-it{display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:12px;padding:10px 12px}
+.obra-it span{flex:1;min-width:0}
+#toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--panel2);padding:12px 20px;border-radius:12px;z-index:50;font-weight:600;max-width:calc(100% - 32px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#toast.err{background:var(--rojo-bg);color:#FFCDD2}
+@media (max-width:620px){
+  .res-card{grid-template-columns:1fr;text-align:center;justify-items:center}
+  #k-reloj{font-size:22px}
+  .k-bot button{padding:12px 14px;font-size:14px}
+  .emp{grid-template-columns:48px 1fr}
+  .emp .acc{grid-column:1/-1;justify-content:flex-start}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ═════════ KIOSCO ═════════ -->
+<div id="kiosko">
+  <header class="k-top">
+    <div class="marca">GT <span>Checador</span></div>
+    <div id="k-obra"><small>Obra</small><span id="k-obra-nom">Sin configurar</span></div>
+    <div id="k-reloj" class="num"><span id="k-hora">--:--</span><small id="k-fecha"></small></div>
+  </header>
+  <main class="k-cam">
+    <video id="vid" playsinline muted autoplay></video>
+    <canvas id="ov"></canvas>
+    <div class="guia" id="guia"></div>
+    <div class="k-msg" id="k-msg">Cargando reconocimiento facial…</div>
+    <div class="k-res" id="k-res" hidden>
+      <div class="res-card" id="res-card">
+        <img id="res-foto" alt="">
+        <div>
+          <div class="res-tipo" id="res-tipo">ENTRADA</div>
+          <div class="res-nombre" id="res-nombre"></div>
+          <div class="res-hora num" id="res-hora"></div>
+          <div class="res-sub" id="res-sub"></div>
+        </div>
+      </div>
+    </div>
+    <div class="k-setup" id="k-setup" hidden>
+      <div>
+        <h2 id="setup-tit">Configura esta tablet</h2>
+        <p id="setup-txt"></p>
+        <button class="pri" id="setup-btn">Abrir administración</button>
+      </div>
+    </div>
+  </main>
+  <footer class="k-bot">
+    <button id="b-pin">Checar con PIN</button>
+    <span id="k-estado"></span>
+    <button id="b-admin">Administración</button>
+  </footer>
+</div>
+
+<!-- ═════════ ADMINISTRACIÓN ═════════ -->
+<div id="admin" hidden>
+  <div class="a-top">
+    <h2>Administración · Checador de prueba</h2>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="emp" aria-selected="true">Empleados</button>
+      <button role="tab" data-tab="reg">Registros</button>
+      <button role="tab" data-tab="obras">Obras</button>
+      <button role="tab" data-tab="ajustes">Ajustes</button>
+    </nav>
+    <button class="pri" id="b-cerrar-admin">Volver al checador</button>
+  </div>
+  <div class="a-cuerpo">
+
+    <section data-panel="emp">
+      <div class="tarjeta">
+        <h4>Nuevo empleado</h4>
+        <div class="grid-form">
+          <label>Nombre completo<input id="e-nombre" autocomplete="off"></label>
+          <label>Puesto<input id="e-puesto" autocomplete="off" placeholder="Ej. OFICIAL ALBAÑIL"></label>
+          <label>PIN de respaldo (4 dígitos)<input id="e-pin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="e-consent">
+          <span>El trabajador leyó el aviso de privacidad y <b>autoriza expresamente</b> el uso de su rostro (dato biométrico) solo para registrar su asistencia. Puede revocarlo en cualquier momento y seguir checando con PIN.</span></label>
+        <div class="fila"><button class="pri" id="b-add-emp">Guardar y registrar rostro</button></div>
+      </div>
+      <div class="tarjeta">
+        <h4>Empleados en esta tablet</h4>
+        <div class="lista" id="lista-emp"></div>
+      </div>
+    </section>
+
+    <section data-panel="reg" hidden>
+      <div class="tarjeta">
+        <h4>Resumen semanal</h4>
+        <div class="grid-form">
+          <label>Semana que contiene el día<input type="date" id="r-dia"></label>
+          <label>Obra<select id="r-obra"></select></label>
+          <button class="pri" id="b-excel">Descargar Excel</button>
+        </div>
+        <div class="tabla-wrap"><table id="t-resumen"></table></div>
+        <p class="nota" id="r-nota"></p>
+      </div>
+      <div class="tarjeta">
+        <h4>Checadas de la semana</h4>
+        <div class="tabla-wrap"><table id="t-checadas"></table></div>
+      </div>
+    </section>
+
+    <section data-panel="obras" hidden>
+      <div class="tarjeta">
+        <h4>Obra de esta tablet</h4>
+        <p class="nota">Cada tablet se queda fija en una obra. Las checadas se registran en la obra seleccionada aquí.</p>
+        <label>Obra<select id="o-tablet"></select></label>
+      </div>
+      <div class="tarjeta">
+        <h4>Catálogo de obras</h4>
+        <div class="fila"><input id="o-nombre" placeholder="Nombre de la obra" autocomplete="off"><button class="pri" id="b-add-obra" style="flex:0 0 auto">Agregar</button></div>
+        <div class="lista" id="lista-obras"></div>
+      </div>
+    </section>
+
+    <section data-panel="ajustes" hidden>
+      <div class="tarjeta">
+        <h4>Seguridad</h4>
+        <div class="grid-form">
+          <label>PIN de administrador (4 dígitos)<input id="s-pin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+          <button class="pri" id="b-save-pin">Cambiar PIN</button>
+        </div>
+      </div>
+      <div class="tarjeta">
+        <h4>Reconocimiento</h4>
+        <div class="grid-form">
+          <label>Exigencia de coincidencia <span id="s-umbral-v" class="num"></span><input type="range" id="s-umbral" min="0.35" max="0.6" step="0.01"></label>
+          <label>Jornada máxima semanal (horas)<input type="number" id="s-max" min="1" max="80"></label>
+        </div>
+        <p class="nota">Más a la izquierda = más estricto (menos errores de identidad, pero puede no reconocer con mala luz). Recomendado: 0.48–0.52. La jornada máxima legal en 2027 es de 46 horas.</p>
+      </div>
+      <div class="tarjeta">
+        <h4>Datos de esta tablet</h4>
+        <p class="nota" id="s-uso"></p>
+        <p class="nota">Versión de prueba: todo se guarda solo en este navegador. No se envía nada a la nube ni a la app principal.</p>
+        <div class="fila"><button id="b-fs">Pantalla completa</button><button class="peligro" id="b-borrar-chk">Borrar checadas</button><button class="peligro" id="b-borrar-todo">Borrar todo</button></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═════════ MODALES ═════════ -->
+<div class="modal" id="m-pin" hidden>
+  <div class="caja">
+    <h3 id="pin-tit">PIN</h3>
+    <div class="pin-pts" id="pin-pts"><i></i><i></i><i></i><i></i></div>
+    <div class="teclado" id="teclado"></div>
+    <button id="pin-cancel">Cancelar</button>
+  </div>
+</div>
+
+<div class="modal" id="m-enrol" hidden>
+  <div class="caja" style="max-width:520px">
+    <h3 id="en-tit">Registrar rostro</h3>
+    <div class="enrol-cam"><video id="vid2" playsinline muted autoplay></video></div>
+    <p id="en-msg">Coloca la cara del trabajador de frente, bien iluminada y sin casco ni lentes oscuros.</p>
+    <div class="barra"><i id="en-barra"></i></div>
+    <div class="fila"><button id="en-cancel">Cancelar</button><button class="pri" id="en-go">Empezar captura</button></div>
+  </div>
+</div>
+
+<div class="modal" id="m-conf" hidden>
+  <div class="caja">
+    <h3 id="cf-tit"></h3>
+    <p id="cf-txt"></p>
+    <div class="fila"><button id="cf-no">Cancelar</button><button class="peligro" id="cf-si">Sí, continuar</button></div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="lib/face-api.js"></script>
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════
+   GT CHECADOR · VERSIÓN DE PRUEBA
+   Todo vive en localStorage de esta tablet. No toca Firebase.
+   ══════════════════════════════════════════════════ */
+const $=s=>document.querySelector(s);
+const LSKEY='gt-checador-prueba-v1';
+const MUESTRAS=5;              // descriptores por empleado al registrar rostro
+const VENTANA_SALIDA=16*3600e3; // una entrada abierta de hace menos de 16 h se cierra con salida
+const ANTI_DOBLE=60e3;         // ignora una segunda checada en menos de 1 min
+const GIRO=0.13;               // cuánto debe girar la cabeza (prueba de vida)
+
+const DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const hhmm=t=>new Date(t).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',hour12:false});
+const fechaLarga=t=>new Date(t).toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+const isoDia=t=>{const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const horas=ms=>(ms/3600e3);
+const fmtH=h=>{const m=Math.round(h*60);return Math.floor(m/60)+':'+String(m%60).padStart(2,'0');};
+
+// ───── Datos ─────
+function vacio(){return{config:{obras:[],obraTablet:null,pinAdmin:'1234',umbral:0.5,maxSemana:46},empleados:[],checadas:[]};}
+function cargar(){try{const x=JSON.parse(localStorage.getItem(LSKEY));if(x&&x.config)return Object.assign(vacio(),x,{config:Object.assign(vacio().config,x.config)});}catch(e){}return vacio();}
+let D=cargar();
+function guardar(){
+  try{localStorage.setItem(LSKEY,JSON.stringify(D));return true;}
+  catch(e){toast('No hay espacio en esta tablet. Descarga el Excel y borra checadas viejas en Ajustes.',true);return false;}
+}
+let _matcher=null;
+function invalidar(){_matcher=null;}
+function matcher(){
+  if(!_matcher)_matcher=D.empleados.filter(e=>e.descriptores&&e.descriptores.length).map(e=>({e,ds:e.descriptores.map(d=>new Float32Array(d))}));
+  return _matcher;
+}
+function mejor(desc){
+  let emp=null,dist=9;
+  for(const m of matcher())for(const d of m.ds){const x=faceapi.euclideanDistance(desc,d);if(x<dist){dist=x;emp=m.e;}}
+  return{emp,dist};
+}
+const obraNombre=id=>(D.config.obras.find(o=>o.id===id)||{}).nombre||'(obra eliminada)';
+
+// ───── UI genérica ─────
+let _tt;
+function toast(t,err){const el=$('#toast');el.textContent=t;el.className=err?'err':'';el.hidden=false;clearTimeout(_tt);_tt=setTimeout(()=>el.hidden=true,err?6000:3000);}
+function confirmar(tit,txt){
+  return new Promise(res=>{
+    $('#cf-tit').textContent=tit;$('#cf-txt').textContent=txt;$('#m-conf').hidden=false;
+    const fin=v=>{$('#m-conf').hidden=true;$('#cf-si').onclick=$('#cf-no').onclick=null;res(v);};
+    $('#cf-si').onclick=()=>fin(true);$('#cf-no').onclick=()=>fin(false);
+  });
+}
+// Teclado de PIN en pantalla (resuelve con los 4 dígitos o null)
+function pedirPin(titulo){
+  return new Promise(res=>{
+    let v='';
+    $('#pin-tit').textContent=titulo;
+    const pts=[...$('#pin-pts').children];
+    const pinta=()=>pts.forEach((p,i)=>p.classList.toggle('on',i<v.length));
+    const tec=$('#teclado');tec.innerHTML='';
+    ['1','2','3','4','5','6','7','8','9','borrar','0','ok'].forEach(k=>{
+      const b=document.createElement('button');b.textContent=k==='borrar'?'←':k==='ok'?'OK':k;
+      if(k==='ok')b.className='pri';
+      b.onclick=()=>{
+        if(k==='borrar')v=v.slice(0,-1);
+        else if(k==='ok'){if(v.length===4)fin(v);return;}
+        else if(v.length<4)v+=k;
+        pinta();if(v.length===4)setTimeout(()=>fin(v),120);
+      };
+      tec.appendChild(b);
+    });
+    const fin=r=>{$('#m-pin').hidden=true;pausa=false;res(r);};
+    $('#pin-cancel').onclick=()=>fin(null);
+    pausa=true;pinta();$('#m-pin').hidden=false;
+  });
+}
+
+// ───── Reloj ─────
+function reloj(){const n=Date.now();$('#k-hora').textContent=hhmm(n);$('#k-fecha').textContent=fechaLarga(n);}
+setInterval(reloj,1000);reloj();
+
+// ───── Cámara y modelos ─────
+const vid=$('#vid'),ov=$('#ov'),g=ov.getContext('2d');
+let stream=null,modelos=false,pausa=false,ocupado=false;
+let detOpts=null;
+async function iniciarCamara(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Este navegador no permite usar la cámara. Abre la página con https:// en Chrome.');
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+  vid.srcObject=stream;$('#vid2').srcObject=stream;
+  await new Promise(r=>vid.readyState>=2?r():vid.onloadeddata=r);
+  ov.width=vid.videoWidth;ov.height=vid.videoHeight;
+}
+async function cargarModelos(){
+  if(typeof faceapi==='undefined')throw new Error('No cargó la librería de reconocimiento (lib/face-api.js).');
+  // WebGL (rápido, usa la tarjeta gráfica); si la tablet no lo tiene, CPU (lento pero funciona)
+  try{if(!await faceapi.tf.setBackend('webgl'))throw 0;}catch(e){await faceapi.tf.setBackend('cpu');}
+  await faceapi.tf.ready();
+  await faceapi.nets.tinyFaceDetector.loadFromUri('models');
+  await faceapi.nets.faceLandmark68Net.loadFromUri('models');
+  await faceapi.nets.faceRecognitionNet.loadFromUri('models');
+  detOpts=new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.5});
+  modelos=true;
+}
+async function detectar(video){
+  return faceapi.detectSingleFace(video,detOpts).withFaceLandmarks().withFaceDescriptor();
+}
+// Giro de cabeza: posición de la nariz respecto al centro de los ojos, normalizada
+function giro(lm){
+  const c=pts=>pts.reduce((a,p)=>({x:a.x+p.x/pts.length,y:a.y+p.y/pts.length}),{x:0,y:0});
+  const l=c(lm.getLeftEye()),r=c(lm.getRightEye()),n=lm.getNose()[3];
+  const d=Math.hypot(r.x-l.x,r.y-l.y)||1;
+  return(n.x-(l.x+r.x)/2)/d;
+}
+// Recorte cuadrado de la cara (espejado, como se ve en pantalla) en JPEG chico
+function foto(box,video=vid){
+  const c=document.createElement('canvas'),S=112;c.width=c.height=S;
+  const x=c.getContext('2d');
+  let sx,sy,s;
+  if(box){s=Math.max(box.width,box.height)*1.6;sx=box.x+box.width/2-s/2;sy=box.y+box.height/2-s/2;}
+  else{s=Math.min(video.videoWidth,video.videoHeight);sx=(video.videoWidth-s)/2;sy=(video.videoHeight-s)/2;}
+  x.translate(S,0);x.scale(-1,1);
+  x.drawImage(video,sx,sy,s,s,0,0,S,S);
+  return c.toDataURL('image/jpeg',0.7);
+}
+
+// ───── Kiosco: máquina de estados ─────
+const guia=$('#guia'),msg=$('#k-msg');
+let K={estado:'buscando'};
+let sinCara=0,desconocido=0,mostrando=false;
+function setMsg(t,mal){msg.textContent=t;msg.classList.toggle('mal',!!mal);}
+function setGuia(c){guia.className='guia'+(c?' '+c:'');}
+function reset(){K={estado:'buscando'};}
+function dibuja(box,color){
+  g.clearRect(0,0,ov.width,ov.height);
+  if(!box)return;
+  g.strokeStyle=color;g.lineWidth=4;g.beginPath();
+  if(g.roundRect)g.roundRect(box.x,box.y,box.width,box.height,16);else g.rect(box.x,box.y,box.width,box.height);
+  g.stroke();
+}
+function listoParaChecar(){
+  if(!D.config.obraTablet){mostrarSetup('Configura esta tablet','Elige en Administración → Obras a qué obra pertenece esta tablet. El PIN inicial de administrador es 1234; cámbialo en Ajustes.');return false;}
+  if(!D.empleados.length){mostrarSetup('No hay empleados','Da de alta a los trabajadores y registra su rostro en Administración → Empleados.');return false;}
+  $('#k-setup').hidden=true;return true;
+}
+function mostrarSetup(t,x){$('#setup-tit').textContent=t;$('#setup-txt').textContent=x;$('#k-setup').hidden=false;}
+
+async function ciclo(){
+  if(modelos&&!pausa&&!ocupado&&!mostrando&&$('#admin').hidden&&vid.readyState>=2&&listoParaChecar()){
+    ocupado=true;
+    try{procesar(await detectar(vid));}catch(e){console.error(e);}
+    ocupado=false;
+  }
+  setTimeout(ciclo,120);
+}
+function procesar(r){
+  const ahora=Date.now();
+  const chica=r&&r.detection.box.width<vid.videoWidth*0.18;
+  if(!r||chica){
+    dibuja(null);
+    if(++sinCara>6){reset();desconocido=0;setGuia('');setMsg(chica?'Acércate un poco más a la cámara':'Párate frente a la cámara para checar');}
+    return;
+  }
+  sinCara=0;
+  const box=r.detection.box,m=mejor(r.descriptor),y=giro(r.landmarks);
+  if(!m.emp||m.dist>D.config.umbral){
+    reset();dibuja(box,'#EF5350');setGuia('mal');
+    if(++desconocido>8)setMsg('No te reconozco. Usa “Checar con PIN”.',true);
+    else setMsg('Identificando…');
+    return;
+  }
+  desconocido=0;
+  if(K.estado!=='vida'||K.emp.id!==m.emp.id){
+    K={estado:'vida',emp:m.emp,base:y,t0:ahora,hits:1,dist:m.dist,foto:foto(box)};
+    dibuja(box,'#C2AB74');setGuia('buscando');
+    setMsg('Hola '+m.emp.nombre.split(' ')[0]+'. Gira un poco la cabeza');
+    return;
+  }
+  K.hits++;K.dist=Math.min(K.dist,m.dist);
+  dibuja(box,'#C2AB74');
+  if(K.hits>=3&&Math.abs(y-K.base)>GIRO){
+    dibuja(box,'#4CAF50');setGuia('ok');
+    const emp=K.emp,f=K.foto,dist=K.dist;reset();
+    registrar(emp,'facial',dist,f);
+  }else if(ahora-K.t0>8000){
+    setMsg('No detecté movimiento. Gira la cabeza a un lado',true);K.t0=ahora;K.base=y;
+  }
+}
+
+function registrar(emp,metodo,dist,f){
+  const ahora=Date.now();
+  const previas=D.checadas.filter(c=>c.empId===emp.id).sort((a,b)=>a.ts-b.ts);
+  const ult=previas[previas.length-1];
+  if(ult&&ahora-ult.ts<ANTI_DOBLE){
+    resultado({clase:'aviso',tipo:'YA REGISTRADO',nombre:emp.nombre,hora:hhmm(ult.ts),sub:'Tu '+ult.tipo+' ya quedó a esa hora en '+ult.obraNombre+'.',foto:ult.foto||f});
+    return;
+  }
+  const tipo=ult&&ult.tipo==='entrada'&&ahora-ult.ts<VENTANA_SALIDA?'salida':'entrada';
+  const c={id:uid(),empId:emp.id,nombre:emp.nombre,obraId:D.config.obraTablet,obraNombre:obraNombre(D.config.obraTablet),tipo,ts:ahora,metodo,dist:dist==null?null:+dist.toFixed(3),foto:f};
+  D.checadas.push(c);
+  if(!guardar()){D.checadas.pop();return;}
+  let sub=c.obraNombre+(metodo==='pin'?' · checada con PIN':'');
+  if(tipo==='salida'){const h=horas(ahora-ult.ts);sub+=' · '+fmtH(h)+' h trabajadas';}
+  resultado({clase:tipo==='salida'?'salida':'',tipo:tipo.toUpperCase(),nombre:emp.nombre,hora:hhmm(ahora),sub,foto:f});
+}
+function resultado(o){
+  mostrando=true;
+  $('#res-card').className='res-card'+(o.clase?' '+o.clase:'');
+  $('#res-tipo').textContent=o.tipo;$('#res-nombre').textContent=o.nombre;$('#res-hora').textContent=o.hora;$('#res-sub').textContent=o.sub;
+  $('#res-foto').src=o.foto||'';
+  $('#k-res').hidden=false;
+  if(navigator.vibrate)try{navigator.vibrate(150);}catch(e){}
+  setTimeout(()=>{$('#k-res').hidden=true;mostrando=false;setGuia('');dibuja(null);setMsg('Párate frente a la cámara para checar');},4000);
+}
+
+// Checada manual con PIN del trabajador (queda marcada como "pin" y con foto)
+$('#b-pin').onclick=async()=>{
+  if(!listoParaChecar())return;
+  const p=await pedirPin('Escribe tu PIN');
+  if(!p)return;
+  const emp=D.empleados.find(e=>e.pin===p);
+  if(!emp){toast('PIN no encontrado',true);return;}
+  let f=null;
+  try{const r=modelos?await faceapi.detectSingleFace(vid,detOpts):null;f=foto(r?r.box:null);}catch(e){}
+  registrar(emp,'pin',null,f);
+};
+
+// ───── Administración ─────
+$('#b-admin').onclick=$('#setup-btn').onclick=async()=>{
+  const p=await pedirPin('PIN de administrador');
+  if(p===null)return;
+  if(p!==D.config.pinAdmin){toast('PIN incorrecto',true);return;}
+  abrirAdmin();
+};
+function abrirAdmin(){$('#admin').hidden=false;pintarTodo();}
+function pintarEstado(){$('#k-estado').textContent=D.empleados.filter(e=>e.descriptores&&e.descriptores.length).length+' rostros registrados · datos solo en esta tablet';}
+$('#b-cerrar-admin').onclick=()=>{$('#admin').hidden=true;pintarEstado();listoParaChecar();};
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  document.querySelectorAll('[data-panel]').forEach(s=>s.hidden=s.dataset.panel!==b.dataset.tab);
+  pintarTodo();
+});
+function pintarTodo(){pintarEmpleados();pintarObras();pintarRegistros();pintarAjustes();}
+
+// Empleados
+function pintarEmpleados(){
+  const L=$('#lista-emp');
+  if(!D.empleados.length){L.innerHTML='<div class="vacio">Todavía no hay empleados. Agrega el primero arriba.</div>';return;}
+  L.innerHTML=D.empleados.map(e=>`
+    <div class="emp">
+      ${e.foto?`<img src="${e.foto}" alt="">`:'<div class="sinfoto">Sin rostro</div>'}
+      <div><b>${esc(e.nombre)}${e.descriptores&&e.descriptores.length?'<span class="chip ok">ROSTRO</span>':'<span class="chip no">SOLO PIN</span>'}</b>
+        <small>${esc(e.puesto||'Sin puesto')} · PIN ${e.pin?'••••':'sin PIN'}${e.consent?' · consentimiento '+esc(new Date(e.consent).toLocaleDateString('es-MX')):''}</small></div>
+      <div class="acc">
+        <button data-a="rostro" data-id="${e.id}">${e.descriptores&&e.descriptores.length?'Volver a registrar':'Registrar rostro'}</button>
+        ${e.descriptores&&e.descriptores.length?`<button data-a="quitar" data-id="${e.id}">Quitar rostro</button>`:''}
+        <button class="peligro" data-a="borrar" data-id="${e.id}">Eliminar</button>
+      </div>
+    </div>`).join('');
+}
+$('#lista-emp').onclick=async ev=>{
+  const b=ev.target.closest('button');if(!b)return;
+  const e=D.empleados.find(x=>x.id===b.dataset.id);if(!e)return;
+  if(b.dataset.a==='rostro'){
+    if(!e.consent){
+      if(!await confirmar('Consentimiento','¿'+e.nombre+' autoriza expresamente el uso de su rostro para checar asistencia?'))return;
+      e.consent=Date.now();
+    }
+    enrolar(e);
+  }else if(b.dataset.a==='quitar'){
+    if(!await confirmar('Quitar rostro','Se borran los datos biométricos de '+e.nombre+'. Podrá seguir checando con su PIN.'))return;
+    e.descriptores=[];e.foto=null;e.consent=null;invalidar();guardar();pintarEmpleados();
+  }else if(b.dataset.a==='borrar'){
+    if(!await confirmar('Eliminar empleado','Se elimina a '+e.nombre+' y sus datos biométricos. Sus checadas anteriores se conservan.'))return;
+    D.empleados=D.empleados.filter(x=>x!==e);invalidar();guardar();pintarEmpleados();
+  }
+};
+$('#b-add-emp').onclick=()=>{
+  const nombre=$('#e-nombre').value.trim().toUpperCase(),puesto=$('#e-puesto').value.trim().toUpperCase(),pin=$('#e-pin').value.trim();
+  if(!nombre){toast('Escribe el nombre',true);return;}
+  if(!/^\d{4}$/.test(pin)){toast('El PIN debe tener 4 dígitos',true);return;}
+  if(D.empleados.some(e=>e.pin===pin)){toast('Ese PIN ya lo tiene otro empleado',true);return;}
+  const consent=$('#e-consent').checked;
+  const e={id:uid(),nombre,puesto,pin,descriptores:[],foto:null,consent:consent?Date.now():null,alta:Date.now()};
+  D.empleados.push(e);guardar();
+  $('#e-nombre').value=$('#e-puesto').value=$('#e-pin').value='';$('#e-consent').checked=false;
+  pintarEmpleados();
+  if(consent)enrolar(e);else toast('Guardado. Sin consentimiento solo podrá checar con PIN.');
+};
+
+// Registro de rostro: toma varias muestras buenas de la cámara
+let enrolando=null;
+function enrolar(e){
+  if(!modelos){toast('El reconocimiento todavía está cargando',true);return;}
+  enrolando={emp:e,cancel:false};
+  $('#en-tit').textContent='Registrar rostro · '+e.nombre;
+  $('#en-msg').textContent='Coloca la cara del trabajador de frente, bien iluminada y sin casco ni lentes oscuros.';
+  $('#en-barra').style.width='0';$('#en-go').disabled=false;
+  $('#m-enrol').hidden=false;
+}
+$('#en-cancel').onclick=()=>{if(enrolando)enrolando.cancel=true;$('#m-enrol').hidden=true;};
+$('#en-go').onclick=async()=>{
+  const job=enrolando;if(!job)return;
+  $('#en-go').disabled=true;
+  const v2=$('#vid2'),ds=[];let f=null,intentos=0;
+  const pasos=['Mira de frente a la cámara','Gira un poco a la izquierda','Gira un poco a la derecha','Levanta un poco la barbilla','Mira de frente otra vez'];
+  while(ds.length<MUESTRAS&&!job.cancel&&intentos<120){
+    intentos++;
+    $('#en-msg').textContent=pasos[ds.length]||'Mira a la cámara';
+    let r=null;try{r=await detectar(v2);}catch(err){}
+    if(r&&r.detection.score>0.7&&r.detection.box.width>v2.videoWidth*0.22){
+      ds.push(Array.from(r.descriptor,x=>+x.toFixed(4)));
+      if(!f)f=foto(r.detection.box,v2);
+      $('#en-barra').style.width=(ds.length/MUESTRAS*100)+'%';
+      await new Promise(s=>setTimeout(s,700));
+    }else await new Promise(s=>setTimeout(s,150));
+  }
+  if(job.cancel)return;
+  if(ds.length<MUESTRAS){$('#en-msg').textContent='No se pudo ver bien la cara. Mejora la luz y acércate.';$('#en-go').disabled=false;return;}
+  // ¿Se parece demasiado a otra persona ya registrada?
+  const media=new Float32Array(128);ds.forEach(d=>d.forEach((x,i)=>media[i]+=x/ds.length));
+  const otro=mejor(media);
+  if(otro.emp&&otro.emp.id!==job.emp.id&&otro.dist<0.45){
+    if(!await confirmar('Posible duplicado','Este rostro se parece mucho al de '+otro.emp.nombre+'. ¿Es otra persona?')){ $('#m-enrol').hidden=true;return; }
+  }
+  job.emp.descriptores=ds;job.emp.foto=f;invalidar();
+  if(guardar()){toast('Rostro registrado: '+job.emp.nombre);}
+  $('#m-enrol').hidden=true;enrolando=null;pintarEmpleados();
+};
+
+// Obras
+function pintarObras(){
+  const sel=$('#o-tablet');
+  sel.innerHTML='<option value="">— Elige la obra —</option>'+D.config.obras.map(o=>`<option value="${o.id}"${o.id===D.config.obraTablet?' selected':''}>${esc(o.nombre)}</option>`).join('');
+  $('#lista-obras').innerHTML=D.config.obras.length?D.config.obras.map(o=>`<div class="obra-it"><span>${esc(o.nombre)}${o.id===D.config.obraTablet?'<span class="chip ok">ESTA TABLET</span>':''}</span><button class="peligro" data-id="${o.id}">Eliminar</button></div>`).join(''):'<div class="vacio">Agrega la primera obra.</div>';
+  $('#k-obra-nom').textContent=D.config.obraTablet?obraNombre(D.config.obraTablet):'Sin configurar';
+}
+$('#o-tablet').onchange=e=>{D.config.obraTablet=e.target.value||null;guardar();pintarObras();};
+$('#b-add-obra').onclick=()=>{
+  const n=$('#o-nombre').value.trim().toUpperCase();if(!n)return;
+  const o={id:uid(),nombre:n};D.config.obras.push(o);
+  if(!D.config.obraTablet)D.config.obraTablet=o.id;
+  $('#o-nombre').value='';guardar();pintarObras();
+};
+$('#lista-obras').onclick=async ev=>{
+  const b=ev.target.closest('button');if(!b)return;
+  const o=D.config.obras.find(x=>x.id===b.dataset.id);
+  if(!o||!await confirmar('Eliminar obra','Se quita '+o.nombre+' del catálogo. Las checadas ya hechas conservan el nombre.'))return;
+  D.config.obras=D.config.obras.filter(x=>x!==o);
+  if(D.config.obraTablet===o.id)D.config.obraTablet=null;
+  guardar();pintarObras();
+};
+
+// Registros: semana lunes–domingo
+function lunes(t){const d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime();}
+function semana(){
+  const dia=$('#r-dia').value?new Date($('#r-dia').value+'T12:00:00').getTime():Date.now();
+  const ini=lunes(dia),fin=ini+7*864e5;
+  const obra=$('#r-obra').value;
+  const chk=D.checadas.filter(c=>c.ts>=ini&&c.ts<fin&&(!obra||c.obraId===obra)).sort((a,b)=>a.ts-b.ts);
+  // Empareja cada entrada con la siguiente salida del mismo empleado; las horas cuentan el día de la entrada
+  const porEmp={};
+  const todas=D.checadas.filter(c=>!obra||c.obraId===obra).sort((a,b)=>a.ts-b.ts);
+  const abiertas={};
+  for(const c of todas){
+    if(c.tipo==='entrada'){abiertas[c.empId]=c;continue;}
+    const e=abiertas[c.empId];delete abiertas[c.empId];
+    if(!e||e.ts<ini||e.ts>=fin)continue;
+    const p=porEmp[c.empId]||(porEmp[c.empId]={nombre:c.nombre,dias:[0,0,0,0,0,0,0],pend:0});
+    p.dias[Math.floor((e.ts-ini)/864e5)]+=horas(c.ts-e.ts);
+  }
+  for(const id in abiertas){const e=abiertas[id];if(e.ts<ini||e.ts>=fin)continue;const p=porEmp[id]||(porEmp[id]={nombre:e.nombre,dias:[0,0,0,0,0,0,0],pend:0});p.pend++;}
+  return{ini,chk,res:Object.values(porEmp).sort((a,b)=>a.nombre.localeCompare(b.nombre))};
+}
+function pintarRegistros(){
+  if(!$('#r-dia').value)$('#r-dia').value=isoDia(Date.now());
+  const ro=$('#r-obra'),prev=ro.value;
+  ro.innerHTML='<option value="">Todas</option>'+D.config.obras.map(o=>`<option value="${o.id}">${esc(o.nombre)}</option>`).join('');
+  ro.value=prev;
+  const{ini,chk,res}=semana(),max=D.config.maxSemana;
+  const cab=DIAS.map((d,i)=>`<th class="n">${d} ${new Date(ini+i*864e5).getDate()}</th>`).join('');
+  $('#t-resumen').innerHTML=res.length?`<thead><tr><th>Empleado</th>${cab}<th class="n">Total</th><th></th></tr></thead><tbody>`+res.map(r=>{
+    const t=r.dias.reduce((a,b)=>a+b,0);
+    return`<tr class="${t>max?'exceso':''}"><td>${esc(r.nombre)}</td>${r.dias.map(h=>`<td class="n">${h?fmtH(h):'—'}</td>`).join('')}<td class="n"><b>${fmtH(t)}</b></td><td>${t>max?'<span class="chip no">EXCEDE '+max+' H</span>':''}${r.pend?'<span class="chip">SIN SALIDA</span>':''}</td></tr>`;
+  }).join('')+'</tbody>':'<tbody><tr><td class="vacio">Sin checadas esta semana.</td></tr></tbody>';
+  $('#r-nota').textContent='Horas en formato h:mm. Una entrada sin salida no suma horas. Se marca en rojo quien pase de '+max+' h en la semana.';
+  $('#t-checadas').innerHTML=chk.length?'<thead><tr><th>Foto</th><th>Empleado</th><th>Tipo</th><th>Día</th><th class="n">Hora</th><th>Obra</th><th>Método</th></tr></thead><tbody>'+chk.slice().reverse().map(c=>`<tr><td>${c.foto?`<img src="${c.foto}" alt="">`:''}</td><td>${esc(c.nombre)}</td><td><span class="chip ${c.tipo==='entrada'?'ent':'sal'}">${c.tipo.toUpperCase()}</span></td><td>${esc(new Date(c.ts).toLocaleDateString('es-MX',{weekday:'short',day:'numeric',month:'short'}))}</td><td class="n">${hhmm(c.ts)}</td><td>${esc(c.obraNombre)}</td><td>${c.metodo==='pin'?'PIN':'Facial'+(c.dist!=null?' ('+c.dist.toFixed(2)+')':'')}</td></tr>`).join('')+'</tbody>':'<tbody><tr><td class="vacio">Sin checadas esta semana.</td></tr></tbody>';
+}
+$('#r-dia').onchange=$('#r-obra').onchange=pintarRegistros;
+
+// Excel (SheetJS se carga solo al descargar; sin internet se usa CSV)
+function cargarXLSX(){
+  if(window.XLSX)return Promise.resolve();
+  return new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s);});
+}
+$('#b-excel').onclick=async()=>{
+  const{ini,chk,res}=semana();
+  const resumen=res.map(r=>{const o={Empleado:r.nombre};r.dias.forEach((h,i)=>o[DIAS[i]+' '+isoDia(ini+i*864e5)]=+h.toFixed(2));o['Total horas']=+r.dias.reduce((a,b)=>a+b,0).toFixed(2);o['Entradas sin salida']=r.pend;return o;});
+  const detalle=chk.map(c=>({Empleado:c.nombre,Tipo:c.tipo,Fecha:isoDia(c.ts),Hora:hhmm(c.ts),Obra:c.obraNombre,Metodo:c.metodo,Coincidencia:c.dist}));
+  const nombre='asistencia_semana_'+isoDia(ini);
+  try{
+    await cargarXLSX();
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(resumen.length?resumen:[{Empleado:'Sin datos'}]),'Resumen');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(detalle.length?detalle:[{Empleado:'Sin datos'}]),'Checadas');
+    XLSX.writeFile(wb,nombre+'.xlsx');
+  }catch(e){
+    const filas=[Object.keys(detalle[0]||{Empleado:''})].concat(detalle.map(Object.values));
+    const csv=filas.map(f=>f.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'}));a.download=nombre+'.csv';a.click();
+    toast('Sin internet: se descargó CSV en lugar de Excel');
+  }
+};
+
+// Ajustes
+function pintarAjustes(){
+  $('#s-umbral').value=D.config.umbral;$('#s-umbral-v').textContent=D.config.umbral.toFixed(2);
+  $('#s-max').value=D.config.maxSemana;
+  const bytes=(localStorage.getItem(LSKEY)||'').length*2;
+  $('#s-uso').textContent=D.empleados.length+' empleados · '+D.checadas.length+' checadas · '+(bytes/1048576).toFixed(2)+' MB usados de ~5 MB disponibles en el navegador.';
+}
+$('#s-umbral').oninput=e=>{D.config.umbral=+e.target.value;$('#s-umbral-v').textContent=D.config.umbral.toFixed(2);};
+$('#s-umbral').onchange=()=>guardar();
+$('#s-max').onchange=e=>{const v=+e.target.value;if(v>0){D.config.maxSemana=v;guardar();}};
+$('#b-save-pin').onclick=()=>{const p=$('#s-pin').value.trim();if(!/^\d{4}$/.test(p)){toast('El PIN debe tener 4 dígitos',true);return;}D.config.pinAdmin=p;guardar();$('#s-pin').value='';toast('PIN de administrador cambiado');};
+$('#b-fs').onclick=()=>{const el=document.documentElement;(el.requestFullscreen?el.requestFullscreen():Promise.reject()).catch(()=>toast('Este navegador no permite pantalla completa',true));};
+$('#b-borrar-chk').onclick=async()=>{if(!await confirmar('Borrar checadas','Se borran las '+D.checadas.length+' checadas de esta tablet. Descarga el Excel antes si las necesitas.'))return;D.checadas=[];guardar();pintarTodo();};
+$('#b-borrar-todo').onclick=async()=>{if(!await confirmar('Borrar todo','Se borran empleados, rostros, obras, checadas y el PIN vuelve a 1234.'))return;D=vacio();invalidar();guardar();pintarTodo();};
+
+// Mantener la pantalla encendida
+async function wakeLock(){try{if('wakeLock' in navigator)await navigator.wakeLock.request('screen');}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wakeLock();});
+
+// ───── Arranque ─────
+(async()=>{
+  pintarObras();
+  try{
+    setMsg('Encendiendo cámara…');
+    await iniciarCamara();
+    setMsg('Cargando reconocimiento facial…');
+    await cargarModelos();
+    setMsg('Párate frente a la cámara para checar');
+    pintarEstado();
+    wakeLock();listoParaChecar();ciclo();
+  }catch(e){
+    console.error(e);
+    const t=e&&e.name==='NotAllowedError'?'Permite el uso de la cámara en el navegador y recarga la página.':e&&e.name==='NotFoundError'?'Esta tablet no tiene cámara disponible.':(e&&e.message)||'Error al iniciar';
+    setMsg(t,true);
+  }
+})();
+</script>
+</body>
+</html>
