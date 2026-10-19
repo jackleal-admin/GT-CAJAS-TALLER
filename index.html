@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNDMkFCNzQiLz48dGV4dCB4PSIzMiIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSIyOCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdUPC90ZXh0Pjwvc3ZnPg==">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#C2AB74">
-<meta name="gt-build" content="2026101501">
+<meta name="gt-build" content="2026101601">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2685,7 +2685,8 @@ window.togglePago=async function(){
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
   c.estatus=c.estatus==='pagado'?'no_pagado':'pagado';
   c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Estatus: '+(c.estatus==='pagado'?'Pagado':'No pagado')});
-  await guardarCaja(c);toast('Estatus actualizado');abrirCaja(S.activeCajaId);
+  const _okG=await guardarCaja(c);toast('Estatus actualizado');abrirCaja(S.activeCajaId);
+  if(_okG&&c.estatus==='pagado')driveAuto(c.id);
 };
 
 // ── RENDER CAJA CONTENT ───────────────────────────
@@ -3005,7 +3006,7 @@ function renderCajaContent(){
           <td colspan="${totalCols}" style="text-align:right">Total de la caja</td>${totalCells}
         </tr></tfoot></table>
       </div>
-      ${compUploadHtml}${notaHtml}${adminActions}
+      ${compUploadHtml}${notaHtml}${adminActions}${driveHtmlCaja(c)}
     </div>${hist}`;
 
   vigilarCandados();pintarCandados();
@@ -4224,10 +4225,11 @@ window.guardarNota=async function(){
 window.cerrarCaja=async function(){
   if(!confirm('¿Cerrar esta caja? Ya no se podrán agregar gastos.'))return;
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
-  c.estado='cerrada';
+  c.estado='cerrada';c.cerradaEn=new Date().toISOString();
   c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Caja cerrada'});
-  await guardarCaja(c);
+  const _okG=await guardarCaja(c);
   toast('Caja cerrada');abrirCaja(S.activeCajaId);
+  if(_okG)driveAuto(c.id);
 };
 
 // América: SOLO cerrar (mismo guardado que cerrarCaja, con aviso más claro)
@@ -4237,10 +4239,11 @@ window.cerrarCajaAmerica=async function(){
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
   if(!c){toast('Esta caja ya no está disponible, recarga la página',true);return;}
   if(c.estado==='cerrada'){toast('Esta caja ya estaba cerrada');abrirCaja(S.activeCajaId);return;}
-  c.estado='cerrada';
+  c.estado='cerrada';c.cerradaEn=new Date().toISOString();
   c.historial.push({ts:new Date().toISOString(),user:S.user.name,accion:'Caja cerrada'});
-  await guardarCaja(c);
+  const _okG=await guardarCaja(c);
   toast('Caja cerrada');abrirCaja(S.activeCajaId);
+  if(_okG)driveAuto(c.id);
 };
 
 // Reabrir caja — solo Jack y Jennifer, cada quien dentro de las empresas
@@ -4270,6 +4273,16 @@ window.exportarCaja=async function(){
   const c=S.cajas.find(x=>x.id===S.activeCajaId);
   if(!c||!c.gastos.length){toast('Sin gastos para exportar',true);return;}
   toast('Generando ZIP…');
+  const r=await generarZipCaja(c);
+  const a=document.createElement('a');a.href='data:application/zip;base64,'+r.b64;
+  a.download=c.name.replace(/\s+/g,'_')+'.zip';a.click();
+  toast(r.fallos?`ZIP generado, pero ${r.fallos} adjunto(s) no se pudieron descargar ⚠️`:'ZIP generado ✓',!!r.fallos);
+};
+
+// 16-oct-2026: arma el ZIP (Excel + adjuntos + comprobante) de una caja.
+// Lo usan la descarga manual y el envío automático a Google Drive.
+// Devuelve {b64, fallos} — fallos = adjuntos que no se pudieron leer.
+async function generarZipCaja(c){
   const wb=XLSX.utils.book_new();
   const GOLD='C2AB74',GOLDD='A8924F',WHITE='FFFFFF',CREAM='FAF6EE',GRAY='606060',DARK='1A1A1A';
   const mfmt='"$"#,##0.00';
@@ -4391,15 +4404,16 @@ window.exportarCaja=async function(){
 
   // Adjuntos: GitHub, Storage URLs (legado) o base64 (legado)
   const adjPromises=[];
+  let fallos=0;const _falla=()=>{fallos++;};
   if(c.gastos){
     c.gastos.forEach(g=>{
       if(g.adjuntoGhPath){
         adjPromises.push(
-          ghFetchRawBlob(g.adjuntoGhPath).then(blob=>{zip.file('adjuntos/'+g.adjunto,blob);}).catch(()=>{})
+          ghFetchRawBlob(g.adjuntoGhPath).then(blob=>{zip.file('adjuntos/'+g.adjunto,blob);}).catch(_falla)
         );
       }else if(g.adjuntoUrl){
         adjPromises.push(
-          fetch(g.adjuntoUrl).then(r=>r.arrayBuffer()).then(buf=>{zip.file('adjuntos/'+g.adjunto,buf);}).catch(()=>{})
+          fetch(g.adjuntoUrl).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer();}).then(buf=>{zip.file('adjuntos/'+g.adjunto,buf);}).catch(_falla)
         );
       }else if(c.adjuntos?.[g.id]?.data){
         const a=c.adjuntos[g.id];
@@ -4410,23 +4424,210 @@ window.exportarCaja=async function(){
   if(c.comprobantePago){
     if(c.comprobantePago.ghPath){
       adjPromises.push(
-        ghFetchRawBlob(c.comprobantePago.ghPath).then(blob=>{zip.file('comprobante/'+c.comprobantePago.name,blob);}).catch(()=>{})
+        ghFetchRawBlob(c.comprobantePago.ghPath).then(blob=>{zip.file('comprobante/'+c.comprobantePago.name,blob);}).catch(_falla)
       );
     }else if(c.comprobantePago.url){
       adjPromises.push(
-        fetch(c.comprobantePago.url).then(r=>r.arrayBuffer()).then(buf=>{zip.file('comprobante/'+c.comprobantePago.name,buf);}).catch(()=>{})
+        fetch(c.comprobantePago.url).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer();}).then(buf=>{zip.file('comprobante/'+c.comprobantePago.name,buf);}).catch(_falla)
       );
     }else if(c.comprobantePago.data){
       zip.file('comprobante/'+c.comprobantePago.name,c.comprobantePago.data.split(',')[1],{base64:true});
     }
   }
   await Promise.allSettled(adjPromises);
-  zip.generateAsync({type:'base64'}).then(b64=>{
-    const a=document.createElement('a');a.href='data:application/zip;base64,'+b64;
-    a.download=c.name.replace(/\s+/g,'_')+'.zip';a.click();
-    toast('ZIP generado ✓');
+  const b64=await zip.generateAsync({type:'base64'});
+  return {b64,fallos};
+}
+
+// ══════════════════════════════════════════════════
+// ENVÍO AUTOMÁTICO DE CAJAS A GOOGLE DRIVE (16-oct-2026)
+// Solo Grupo Trego (colección app_cajas). Destino (lo decide el Apps Script):
+//   TALLER / CON FACTURA|SIN FACTURA / <AÑO de cierre> / <nombre caja>.zip
+// - "cierre": primer envío al cerrar la caja.
+// - "pago":   envío final al marcarla pagada (reemplaza el de cierre).
+// Cada modo se manda UNA sola vez (c.drive.cierre.ok / c.drive.pago.ok):
+// reabrir y volver a cerrar, o desmarcar y volver a marcar pagada, NO reenvía.
+// Si falla, la caja queda igual (cerrada/pagada) y se marca para Reintentar.
+// La URL y la clave del script se leen de Firestore: config/drive {url, clave}.
+// ══════════════════════════════════════════════════
+const DRIVE_COL='app_cajas';
+const DRIVE_MAX_BYTES=35*1024*1024;      // mismo límite que el Apps Script
+const DRIVE_TIMEOUT_MS=4*60*1000;
+const _driveEnviando=new Set();          // cajas enviándose en ESTE navegador
+
+function _driveEsGT(){return getBase()==='app';}
+
+function _driveAnioMty(iso){
+  const d=new Date(iso||Date.now());
+  const f=isNaN(d)?new Date():d;
+  try{return Number(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Monterrey',year:'numeric'}).format(f));}
+  catch(e){return f.getFullYear();}
+}
+
+// Fecha de cierre: campo nuevo cerradaEn; en cajas viejas, el último "Caja cerrada" del historial
+function _driveFechaCierre(c){
+  if(c.cerradaEn)return c.cerradaEn;
+  const h=(c.historial||[]).filter(x=>x&&x.accion==='Caja cerrada');
+  if(h.length)return h[h.length-1].ts;
+  return c.createdAt||new Date().toISOString();
+}
+
+// ¿Qué envío le falta a esta caja? 'cierre' | 'pago' | null
+function driveModoPendiente(c){
+  if(!c||c.estado!=='cerrada')return null;
+  const d=c.drive||{};
+  if(d.pago&&d.pago.ok)return null;
+  if(c.estatus==='pagado')return 'pago';
+  if(d.cierre&&d.cierre.ok)return null;
+  return 'cierre';
+}
+
+async function _driveEsperarFirebase(ms){
+  const t0=Date.now();
+  while(!(_db&&_doc&&_getDoc&&_runTransaction)){
+    if(Date.now()-t0>ms)return false;
+    await new Promise(r=>setTimeout(r,200));
+  }
+  return true;
+}
+
+async function _driveLeerConfig(){
+  const snap=await _getDoc(_doc(_db,'config','drive'));
+  if(!snap.exists())return null;
+  const d=snap.data()||{};
+  const url=String(d.url||'').trim(),clave=String(d.clave||'').trim();
+  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)||!clave)return null;
+  return {url,clave};
+}
+
+// Escribe SOLO el campo "drive" (y una línea de historial) directo en app_cajas,
+// sin depender de la empresa que esté abierta en pantalla en ese momento.
+async function _driveGuardar(id,cambiosDrive,accionHist){
+  const ref=_doc(_db,DRIVE_COL,id);
+  await _runTransaction(_db,async tx=>{
+    const snap=await tx.get(ref);
+    if(!snap.exists())throw new Error('La caja ya no existe');
+    const srv=snap.data();
+    const drive=Object.assign({},srv.drive||{},cambiosDrive);
+    const salida=Object.assign({},srv,{drive});
+    if(accionHist){
+      salida.historial=(Array.isArray(srv.historial)?srv.historial:[]).concat([{ts:new Date().toISOString(),user:S.user?.name||'Sistema',accion:accionHist}]);
+    }
+    tx.set(ref,salida);
   });
+}
+
+// Disparo automático (al cerrar o al marcar pagada): no bloquea a quien cierra.
+function driveAuto(id){
+  if(!_driveEsGT())return;
+  setTimeout(()=>{enviarCajaDrive(id,{auto:true}).catch(e=>console.error('[GT] Drive:',e));},300);
+}
+
+async function enviarCajaDrive(id,opts={}){
+  if(_driveEnviando.has(id))return;
+  if(!_driveEsGT())return;
+  const c0=S.cajas.find(x=>x.id===id);
+  if(!c0)return;
+  const modo=driveModoPendiente(c0);
+  if(!modo){if(!opts.auto)toast('Esta caja ya está en Drive ✓');return;}
+  if(!c0.gastos||!c0.gastos.length){
+    if(!opts.auto)toast('La caja no tiene gastos: no se manda a Drive',true);
+    return;
+  }
+
+  _driveEnviando.add(id);
+  if(S.activeCajaId===id)try{renderCajaContent();}catch(e){}
+  const anio=(c0.drive&&c0.drive.anio)||_driveAnioMty(_driveFechaCierre(c0));
+  const etiquetaModo=modo==='pago'?'versión pagada':'cierre';
+  try{
+    if(!await _driveEsperarFirebase(15000))throw new Error('Firebase no conectó');
+    const cfg=await _driveLeerConfig();
+    if(!cfg)throw new Error('Drive no está configurado (falta config/drive en Firebase)');
+
+    // Marca "pendiente" ANTES de enviar: si se cierra la pestaña a la mitad, queda para Reintentar
+    await _driveGuardar(id,{anio,pendiente:modo,error:null});
+
+    toast('☁️ Guardando "'+c0.name+'" en Drive ('+etiquetaModo+')…');
+    const c=S.cajas.find(x=>x.id===id)||c0;
+    const z=await generarZipCaja(c);
+    if(z.fallos)throw new Error(z.fallos+' adjunto(s) no se pudieron descargar; no se mandó un ZIP incompleto');
+    const bytes=Math.floor(z.b64.length*3/4);
+    if(bytes>DRIVE_MAX_BYTES)throw new Error('El ZIP pesa '+(bytes/1048576).toFixed(1)+' MB (máx. 35 MB)');
+
+    const ctrl=new AbortController();const tmo=setTimeout(()=>ctrl.abort(),DRIVE_TIMEOUT_MS);
+    let resp;
+    try{
+      const r=await fetch(cfg.url,{
+        method:'POST',redirect:'follow',signal:ctrl.signal,
+        headers:{'Content-Type':'text/plain;charset=utf-8'}, // sin preflight CORS
+        body:JSON.stringify({clave:cfg.clave,modo,tipo:c.tipo,anio,nombre:c.name,usuario:S.user?.name||'',cajaId:id,zip:z.b64})
+      });
+      resp=await r.json();
+    }catch(e){
+      throw new Error(e&&e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con Google Drive');
+    }finally{clearTimeout(tmo);}
+    if(!resp||!resp.ok)throw new Error((resp&&(resp.msg||resp.error))||'Respuesta inválida de Drive');
+
+    const reg={ok:true,fecha:new Date().toISOString(),por:S.user?.name||'',fileId:resp.fileId||'',url:resp.url||''};
+    const cambios={anio,pendiente:null,error:null};cambios[modo]=reg;
+    await _driveGuardar(id,cambios,'Guardada en Drive ('+etiquetaModo+(resp.yaExiste?', ya existía':'')+')');
+    toast('✅ "'+c0.name+'" guardada en Drive ('+etiquetaModo+')');
+  }catch(e){
+    const msg=String(e&&e.message||e).slice(0,200);
+    console.error('[GT] Error enviando a Drive:',e);
+    try{await _driveGuardar(id,{anio,pendiente:modo,error:{msg,fecha:new Date().toISOString(),modo}},'Error al guardar en Drive: '+msg);}catch(e2){}
+    toast('⚠️ No se pudo guardar en Drive: '+msg+'. La caja quedó igual; usa «Reintentar».',true);
+  }finally{
+    _driveEnviando.delete(id);
+    if(S.activeCajaId===id)try{renderCajaContent();}catch(e){}
+  }
+}
+
+window.reintentarDriveCaja=function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  if(!c)return;
+  if(!(isAdmin()||(window.gtEsAmerica&&gtEsAmerica()))){toast('Sin permiso',true);return;}
+  enviarCajaDrive(c.id,{auto:false});
 };
+window.enviarDriveManual=function(){
+  const c=S.cajas.find(x=>x.id===S.activeCajaId);
+  if(!c)return;
+  if(!(isSuperAdmin()&&S.user?.name==='Jack')){toast('Solo Jack puede mandar cajas anteriores a Drive',true);return;}
+  if(!confirm('¿Mandar "'+c.name+'" a Google Drive?'))return;
+  enviarCajaDrive(c.id,{auto:false});
+};
+
+// Bloque de estado dentro de la caja (solo GT, solo cajas cerradas)
+function driveHtmlCaja(c){
+  if(!_driveEsGT()||!c||c.estado!=='cerrada')return '';
+  const puedeVer=isAdmin()||(window.gtEsAmerica&&gtEsAmerica());
+  if(!puedeVer)return '';
+  const d=c.drive||{};
+  const modo=driveModoPendiente(c);
+  const esJack=isSuperAdmin()&&S.user?.name==='Jack';
+  const puedeReintentar=isAdmin()||(window.gtEsAmerica&&gtEsAmerica());
+  const enlace=(r)=>r&&r.url&&/^https:\/\/drive\.google\.com\//.test(r.url)?` · <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">abrir</a>`:'';
+  let linea='',boton='';
+  if(_driveEnviando.has(c.id)){
+    linea='<i class="ti ti-loader"></i> Guardando en Drive… no cierres la app';
+  }else if(d.pago&&d.pago.ok){
+    linea=`<i class="ti ti-cloud-check"></i> En Drive: versión pagada · ${escapeHtml(d.pago.por||'')} · ${fmtDate(d.pago.fecha)}${enlace(d.pago)}`;
+  }else if(d.error&&modo){
+    linea=`<i class="ti ti-alert-triangle"></i> No se pudo guardar en Drive (${escapeHtml(d.error.modo==='pago'?'versión pagada':'cierre')}): ${escapeHtml(d.error.msg||'')}`;
+    if(puedeReintentar)boton=`<button class="btn-sm btn-gold" style="margin-left:6px" onclick="reintentarDriveCaja()"><i class="ti ti-refresh"></i> Reintentar</button>`;
+  }else if(d.pendiente&&modo){
+    linea=`<i class="ti ti-clock"></i> Envío a Drive pendiente (${escapeHtml(d.pendiente==='pago'?'versión pagada':'cierre')})`;
+    if(puedeReintentar)boton=`<button class="btn-sm btn-gold" style="margin-left:6px" onclick="reintentarDriveCaja()"><i class="ti ti-refresh"></i> Reintentar</button>`;
+  }else if(d.cierre&&d.cierre.ok){
+    linea=`<i class="ti ti-cloud-check"></i> En Drive: cierre · ${escapeHtml(d.cierre.por||'')} · ${fmtDate(d.cierre.fecha)}${enlace(d.cierre)}`;
+    if(modo==='pago'&&puedeReintentar)boton=`<button class="btn-sm btn-gold" style="margin-left:6px" onclick="reintentarDriveCaja()"><i class="ti ti-cloud-upload"></i> Mandar versión pagada</button>`;
+  }else if(modo){
+    linea='<i class="ti ti-cloud-off"></i> Esta caja no está en Drive';
+    if(esJack)boton=`<button class="btn-sm btn-gold" style="margin-left:6px" onclick="enviarDriveManual()"><i class="ti ti-cloud-upload"></i> Enviar a Drive</button>`;
+  }else return '';
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;flex-wrap:wrap;gap:4px">${linea}${boton}</div>`;
+}
+
 
 window.exportConsolidado=function(tipo){
   const filtered=S.cajas.filter(c=>c.tipo===tipo);
