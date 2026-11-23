@@ -74,14 +74,15 @@ function saldoVacaciones(e){
   return{...A,derecho,usados,pend,disp:derecho-usados-pend};
 }
 function contarDias(desde,hasta){let n=0;for(let t=deIso(desde);t<=deIso(hasta);t+=DIA)if(new Date(t).getDay()!==0)n++;return n;}
-// Arts. 110 fr. I y 111: deuda máx. un mes de salario; descuento máx. 30% del excedente del salario mínimo; sin intereses
+// Arts. 110 fr. I y 111: deuda máx. un mes de salario; descuento máx. 30% del excedente del salario mínimo; sin intereses.
+// El trabajador solo pide un monto; Jack decide monto, plazo y descuento al autorizar, y la app le avisa si pasa de esos límites.
 function saldoPrestamo(s){return Math.max(0,s.datos.monto-D.abonos.filter(a=>a.solId===s.id).reduce((x,a)=>x+a.monto,0));}
 function limitesPrestamo(e){
   const mias=D.solicitudes.filter(s=>s.tipo==='prestamo'&&s.empId===e.id);
-  const debe=mias.filter(s=>s.estado==='pendiente'||s.estado==='autorizada').reduce((a,s)=>a+(s.estado==='pendiente'?s.datos.monto:saldoPrestamo(s)),0);
+  const debe=mias.filter(s=>s.estado==='autorizada').reduce((a,s)=>a+saldoPrestamo(s),0);
   const maxMonto=Math.max(0,e.salarioDiario*30-debe);
   const maxDesc=Math.max(0,0.30*(e.salarioDiario-D.config.salarioMinimo)*7);
-  const comprometido=mias.filter(s=>s.estado==='pendiente'||(s.estado==='autorizada'&&saldoPrestamo(s)>0)).reduce((a,s)=>a+s.datos.descuento,0);
+  const comprometido=mias.filter(s=>s.estado==='autorizada'&&saldoPrestamo(s)>0).reduce((a,s)=>a+s.datos.descuento,0);
   return{debe,maxMonto,maxDesc,descDisp:Math.max(0,maxDesc-comprometido)};
 }
 
@@ -421,23 +422,17 @@ VISTAS.vacaciones=(m)=>{
 };
 VISTAS.prestamos=(m)=>{
   if(!datosCompletos(m))return;
-  const L=limitesPrestamo(YO),mios=D.solicitudes.filter(s=>s.tipo==='prestamo'&&s.empId===YO.id).sort((a,b)=>b.creado-a.creado),puede=L.maxMonto>0&&L.descDisp>0;
+  const L=limitesPrestamo(YO),mios=D.solicitudes.filter(s=>s.tipo==='prestamo'&&s.empId===YO.id).sort((a,b)=>b.creado-a.creado);
   m.innerHTML=`<div class="as-cab"><h2>Préstamos</h2>${volver()}</div>
-  <div class="as-kpis"><div class="as-kpi"><small>Salario diario</small><b>${dinero(YO.salarioDiario)}</b></div><div class="as-kpi"><small>Monto máximo</small><b>${dinero(L.maxMonto)}</b></div><div class="as-kpi"><small>Descuento semanal máx.</small><b>${dinero(L.descDisp)}</b></div><div class="as-kpi"><small>Adeudo actual</small><b>${dinero(L.debe)}</b></div></div>
-  <p class="as-nota">Por ley (arts. 110 y 111 LFT): el adeudo no puede pasar de un mes de salario, el descuento semanal no puede pasar del 30% de lo que ganas arriba del salario mínimo (${dinero(D.config.salarioMinimo)} diarios) y no se cobran intereses.</p>
-  ${puede?`<div class="as-card"><h3>Nueva solicitud</h3><div class="as-form"><label>Monto<input type="number" id="as-pm" min="100" step="50"></label><label>Pagarlo en (semanas)<input type="number" id="as-ps" min="1" max="52" value="4"></label></div>
-    <p class="as-nota" id="as-pc">Escribe el monto y el plazo.</p>
-    <div class="as-legal">Solicito un anticipo de salario por el monto indicado, sin intereses, y autorizo que se descuente de mi salario en los pagos semanales indicados, conforme a los artículos 110, fracción I, y 111 de la Ley Federal del Trabajo. La solicitud queda sujeta a autorización de la empresa.</div>
-    ${htmlFirma('as-fp')}<button class="pri" id="as-penv">Firmar y enviar solicitud</button></div>`
-  :`<div class="as-vacio">${L.maxMonto<=0?'Ya tienes el adeudo máximo permitido (un mes de salario).':'Con tu salario actual la ley no permite descuentos adicionales.'}</div>`}
+  <div class="as-kpis"><div class="as-kpi"><small>Adeudo actual</small><b>${dinero(L.debe)}</b></div></div>
+  <div class="as-card"><h3>Nueva solicitud</h3><div class="as-form"><label>¿Cuánto necesitas?<input type="number" id="as-pm" min="1" step="50"></label><label>Motivo (opcional)<input id="as-pmo" maxlength="140"></label></div>
+    <p class="as-nota">Jack decide cuánto se autoriza y en cuántas semanas se descuenta. Te avisaremos cuando lo revise.</p>
+    <div class="as-legal">Solicito un anticipo de salario por el monto indicado. Autorizo que el monto que la empresa apruebe se descuente de mi salario en los pagos semanales que se me indiquen, sin intereses, dentro de los límites de los artículos 110, fracción I, y 111 de la Ley Federal del Trabajo. La solicitud queda sujeta a autorización de la empresa.</div>
+    ${htmlFirma('as-fp')}<button class="pri" id="as-penv">Firmar y enviar solicitud</button></div>
   <div class="as-card"><h3>Mis préstamos</h3>${listaSolicitudes(mios)}</div>`;
-  if(!puede)return;
   FIRMAS['as-fp']=panelFirma($a('#as-fp'));
-  const calc=()=>{const mo=+$a('#as-pm').value,s=Math.round(+$a('#as-ps').value);if(!(mo>0)||!(s>0)){$a('#as-pc').textContent='Escribe el monto y el plazo.';return null;}
-    const d=Math.ceil(mo/s*100)/100,err=[];if(mo>L.maxMonto)err.push('el monto pasa del máximo ('+dinero(L.maxMonto)+')');if(d>L.descDisp)err.push('el descuento pasa del máximo semanal ('+dinero(L.descDisp)+'); usa '+Math.ceil(mo/L.descDisp)+' semanas o más');
-    $a('#as-pc').innerHTML=`Descuento de <b>${dinero(d)}</b> por semana durante <b>${s}</b> semanas.`+(err.length?` <span class="as-chip mal">REVISA</span> ${esc(err.join(' y '))}.`:'');return err.length?null:{monto:mo,semanas:s,descuento:d};};
-  $a('#as-pm').oninput=$a('#as-ps').oninput=calc;
-  $a('#as-penv').onclick=()=>{const r=calc();if(!r){toast('Revisa el monto y las semanas',true);return;}if(FIRMAS['as-fp'].vacio()){toast('Falta tu firma',true);return;}crearSolicitud('prestamo',r,FIRMAS['as-fp'].png());ir('prestamos');};
+  $a('#as-penv').onclick=()=>{const mo=+$a('#as-pm').value;if(!(mo>0)){toast('Escribe cuánto necesitas',true);return;}if(FIRMAS['as-fp'].vacio()){toast('Falta tu firma',true);return;}
+    crearSolicitud('prestamo',{solicitado:mo,motivo:$a('#as-pmo').value.trim()},FIRMAS['as-fp'].png());ir('prestamos');};
 };
 function crearSolicitud(tipo,datos,firma){
   const s={id:uid(),tipo,empId:YO.id,creado:Date.now(),estado:'pendiente',firma,foto:FOTO,acceso:ACCESO,dispositivo:DISP.id,datos};
@@ -447,7 +442,7 @@ function listaSolicitudes(l,admin){
   if(!l.length)return'<div class="as-vacio">Sin solicitudes.</div>';
   return'<div style="display:flex;flex-direction:column;gap:8px">'+l.map(s=>{const e=emp(s.empId)||{nombre:'?'};
     const est={pendiente:'<span class="as-chip av">PENDIENTE</span>',autorizada:'<span class="as-chip ok">AUTORIZADA</span>',rechazada:'<span class="as-chip mal">RECHAZADA</span>'}[s.estado];
-    const det=s.tipo==='vacaciones'?`${s.datos.dias} días · ${fCorta(deIso(s.datos.desde))} al ${fCorta(deIso(s.datos.hasta))}`:`${dinero(s.datos.monto)} en ${s.datos.semanas} semanas (${dinero(s.datos.descuento)}/sem)${s.estado==='autorizada'?' · saldo '+dinero(saldoPrestamo(s)):''}`;
+    const det=s.tipo==='vacaciones'?`${s.datos.dias} días · ${fCorta(deIso(s.datos.desde))} al ${fCorta(deIso(s.datos.hasta))}`:(s.estado==='autorizada'?`Autorizado ${dinero(s.datos.monto)} en ${s.datos.semanas} semanas (${dinero(s.datos.descuento)}/sem) · saldo ${dinero(saldoPrestamo(s))}`:`Solicitó ${dinero(s.datos.solicitado)}`);
     return`<div class="as-sol"><div><b>${s.tipo==='vacaciones'?'Vacaciones':'Préstamo'}${admin?' · '+esc(e.nombre):''} ${est}</b><small>${det} · ${fCorta(s.creado)} ${hhmm(s.creado)}</small></div><button data-ver="${s.id}">${admin&&s.estado==='pendiente'&&esJack()?'Revisar':'Ver comprobante'}</button></div>`;}).join('')+'</div>';
 }
 function verSolicitud(id){
@@ -456,13 +451,21 @@ function verSolicitud(id){
   const c=abrirModal(`<div class="as-comp"><h4>${vac?'Solicitud de vacaciones':'Solicitud de anticipo de salario'} · ${esc(D.config.empresa)}</h4>
     <div><b>${esc(e.nombre)}</b> · No. ${esc(e.num)}</div><div>Folio ${esc(s.id.toUpperCase())} · ${fLarga(s.creado)} ${hhmm(s.creado)} · acceso con ${esc(s.acceso)}</div><hr>
     ${vac?`<div>Del <b>${fLarga(deIso(s.datos.desde))}</b> al <b>${fLarga(deIso(s.datos.hasta))}</b>: <b>${s.datos.dias} días</b> (año ${s.datos.periodo}). Prima vacacional estimada: ${dinero(s.datos.prima)}.</div>`
-    :`<div>Monto <b>${dinero(s.datos.monto)}</b>, sin intereses. Descuento de <b>${dinero(s.datos.descuento)}</b> por semana durante <b>${s.datos.semanas}</b> semanas.</div>`}
+    :`<div>Monto solicitado: <b>${dinero(s.datos.solicitado)}</b>${s.datos.motivo?' · Motivo: '+esc(s.datos.motivo):''}</div>${s.estado==='autorizada'?`<div>Monto autorizado <b>${dinero(s.datos.monto)}</b>, sin intereses. Descuento de <b>${dinero(s.datos.descuento)}</b> por semana durante <b>${s.datos.semanas}</b> semanas.</div>`:''}`}
     <div class="as-fila" style="margin-top:10px;align-items:flex-end"><div><small>Firma del trabajador</small><br><img class="as-firmaimg" src="${s.firma}" alt="Firma"></div>${s.foto?`<div><small>Foto al firmar</small><br><img src="${s.foto}" alt="" style="width:80px;height:80px;border-radius:8px;object-fit:cover"></div>`:''}</div>
     ${s.resolucion?`<hr><div><b>${s.estado==='autorizada'?'Autorizada':'Rechazada'}</b> por ${esc(s.resolucion.por)} el ${fLarga(s.resolucion.ts)} ${hhmm(s.resolucion.ts)}${s.resolucion.nota?' · '+esc(s.resolucion.nota):''}</div>${s.resolucion.firma?`<small>Firma de autorización</small><br><img class="as-firmaimg" src="${s.resolucion.firma}" alt="Firma">`:''}`:''}
     ${!vac&&s.estado==='autorizada'?`<hr><div><b>Descuentos:</b> ${abonos.length?abonos.map(a=>'Sem. '+a.semana+': '+dinero(a.monto)).join(' · '):'ninguno todavía'} · <b>Saldo ${dinero(saldoPrestamo(s))}</b></div>`:''}</div>
+    ${puede&&!vac?`<div class="as-form"><label>Monto que autorizas<input type="number" id="as-am" min="1" step="50" value="${s.datos.solicitado}"></label><label>Descontar en (semanas)<input type="number" id="as-as" min="1" max="104" value="${Math.max(1,Math.ceil(s.datos.solicitado/Math.max(1,limitesPrestamo(e).descDisp||s.datos.solicitado)))}"></label></div><p class="as-nota" id="as-ac"></p>`:''}
     ${puede?`<label>Nota (opcional)<input id="as-anota"></label>${htmlFirma('as-fa')}<div class="as-fila as-noprint"><button data-a="cerrar">Cerrar</button><button class="peligro" data-a="rechazar">Rechazar</button><button class="pri" data-a="autorizar">Firmar y autorizar</button></div>`
     :`<div class="as-fila as-noprint">${MODO==='staff'&&esJack()&&!vac&&s.estado==='autorizada'&&saldoPrestamo(s)>0?'<button data-a="abono">Registrar descuento de esta semana</button>':''}<button data-a="imprimir">Imprimir</button><button class="pri" data-a="cerrar">Cerrar</button></div>`}`);
   if(puede)FIRMAS['as-fa']=panelFirma($a('#as-fa'));
+  // Al autorizar un préstamo: calcula el descuento semanal y avisa si pasa de los límites de ley (no lo impide)
+  const terminos=()=>{const mo=+$a('#as-am').value,se=Math.round(+$a('#as-as').value);if(!(mo>0)||!(se>0)){$a('#as-ac').textContent='Escribe el monto y las semanas.';return null;}
+    const d=Math.ceil(mo/se*100)/100,L=e.salarioDiario?limitesPrestamo(e):null,av=[];
+    if(L){if(mo>L.maxMonto)av.push('el adeudo pasaría de un mes de salario ('+dinero(L.maxMonto)+' disponibles)');if(d>L.descDisp)av.push('el descuento pasa del 30% del excedente del salario mínimo ('+dinero(L.descDisp)+' por semana)');}
+    $a('#as-ac').innerHTML=`Descuento de <b>${dinero(d)}</b> por semana durante <b>${se}</b> semanas.`+(av.length?` <span class="as-chip av">AVISO</span> Por ley ${esc(av.join(' y '))}.`:'')+(L?'':' Faltan el salario o la fecha de ingreso del trabajador para revisar los límites de ley.');
+    return{monto:mo,semanas:se,descuento:d};};
+  if(puede&&!vac){$a('#as-am').oninput=$a('#as-as').oninput=terminos;terminos();}
   c.onclick=ev=>{const b=ev.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
     if(a==='cerrar'){cerrarModal();pintar();}
     else if(a==='imprimir')window.print();
@@ -471,6 +474,7 @@ function verSolicitud(id){
     else if(a==='autorizar'||a==='rechazar'){
       if(!(MODO==='staff'&&esJack()))return;
       if(a==='autorizar'&&FIRMAS['as-fa'].vacio()){toast('Falta tu firma para autorizar',true);return;}
+      if(a==='autorizar'&&!vac){const t=terminos();if(!t){toast('Escribe el monto y las semanas',true);return;}Object.assign(s.datos,t);}
       s.estado=a==='autorizar'?'autorizada':'rechazada';
       s.resolucion={por:'Jack',ts:Date.now(),nota:$a('#as-anota').value.trim(),firma:FIRMAS['as-fa'].vacio()?null:FIRMAS['as-fa'].png()};
       bitacora(s.estado+' '+s.tipo+' '+s.id);guardar();toast('Solicitud '+s.estado);verSolicitud(s.id);}};
@@ -631,7 +635,7 @@ async function exportar(n){
   const{ini,filas}=resumenSemana(n,null),fin=ini+7*DIA;
   const res=filas.map(f=>{const o={'No.':f.emp.num,Nombre:f.emp.nombre};f.dias.forEach((d,i)=>o[DIAS_SEM[i]+' '+iso(ini+i*DIA)]=+d.h.toFixed(2));o['Total h']=+f.total.toFixed(2);o.Observaciones=[...f.flags].join(', ');return o;});
   const chk=efectivas().filter(c=>c.ts>=ini&&c.ts<fin).map(c=>{const e=emp(c.empId)||{};return{'No.':e.num,Nombre:e.nombre,Tipo:c.tipo,Fecha:iso(c.ts),Hora:hhmm(c.ts),Obra:obraNom(c.obra),Metodo:c.metodo,Correccion:c.corr?c.corr.motivo+' ('+c.corr.por+')':''};});
-  const sols=D.solicitudes.map(s=>{const e=emp(s.empId)||{};return{Folio:s.id.toUpperCase(),Tipo:s.tipo,Nombre:e.nombre,Estado:s.estado,Solicitada:iso(s.creado),Detalle:s.tipo==='vacaciones'?s.datos.dias+' días del '+s.datos.desde+' al '+s.datos.hasta:dinero(s.datos.monto)+' en '+s.datos.semanas+' sem.',Saldo:s.tipo==='prestamo'&&s.estado==='autorizada'?saldoPrestamo(s):''};});
+  const sols=D.solicitudes.map(s=>{const e=emp(s.empId)||{};return{Folio:s.id.toUpperCase(),Tipo:s.tipo,Nombre:e.nombre,Estado:s.estado,Solicitada:iso(s.creado),Detalle:s.tipo==='vacaciones'?s.datos.dias+' días del '+s.datos.desde+' al '+s.datos.hasta:(s.estado==='autorizada'?'Autorizado '+dinero(s.datos.monto)+' en '+s.datos.semanas+' sem. (solicitó '+dinero(s.datos.solicitado)+')':'Solicitó '+dinero(s.datos.solicitado)),Saldo:s.tipo==='prestamo'&&s.estado==='autorizada'?saldoPrestamo(s):''};});
   try{if(!window.XLSX)await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(res.length?res:[{Nombre:'Sin datos'}]),'Resumen');
